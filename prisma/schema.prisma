@@ -1,0 +1,128 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Student {
+  id            Int                @id @default(autoincrement())
+  name          String?
+  email         String             @unique
+  phoneNumber   String?            @unique
+  password      String
+  refreshToken  String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  imagePath     String?
+  address       String
+  academicLevel ACADEMICLEVEL
+  courses       CourseEnrollment[]
+
+  @@map("students")
+}
+
+model Course {
+  id          Int                @id @default(autoincrement())
+  title       String             @unique
+  description String
+  level       LEVEL
+  price       Decimal            @default(0) @db.Decimal(10, 2)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  enrollments CourseEnrollment[]
+  deadline    DateTime
+  outlinePath String?
+
+  @@map("courses")
+}
+
+model CourseEnrollment {
+  id           Int              @id @default(autoincrement())
+  student      Student          @relation(fields: [studentId], references: [id])
+  studentId    Int
+  course       Course           @relation(fields: [courseId], references: [id])
+  courseId     Int
+  dateEnrolled DateTime         @default(now())
+  paidAmount   Decimal          @db.Decimal(10, 2)
+  status       ENROLLMENTSTATUS @default(PENDING)
+  reference    String
+
+  @@map("courseenrolment")
+}
+
+model Product {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String
+  platform    PLATFORM
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  url         String   @unique
+  imagePath   String?
+
+  @@map("products")
+}
+
+model Blog {
+  id          Int      @id @default(autoincrement())
+  title       String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  datePosted  DateTime
+  postUrl     String   @unique
+  imagePath   String?
+  description String
+
+  @@map("blog")
+}
+
+model Admin {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  password     String
+  refreshToken String?
+  name         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  role         ROLE     @default(SUB)
+
+  @@map("admin")
+}
+
+enum LEVEL {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCE
+}
+
+enum ENROLLMENTSTATUS {
+  PENDING
+  STARTED
+  DROPPED
+  FINISHED
+}
+
+enum ACADEMICLEVEL {
+  OLEVEL
+  ND
+  HND
+  BSC
+  GRADUATE
+}
+
+enum PLATFORM {
+  MOBILE
+  WEB
+  DESKTOP
+}
+
+enum ROLE {
+  SUPER
+  SUB
+}
