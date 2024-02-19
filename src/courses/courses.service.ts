@@ -189,4 +189,15 @@ export class CoursesService {
       },
     });
   }
+
+  async latestCourses(): Promise<Course[] | undefined> {
+    const courses = await this.prisma.course.findMany({
+      orderBy: {
+        deadline: 'desc',
+      },
+      take: 5,
+    });
+
+    return courses;
+  }
 }

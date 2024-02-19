@@ -180,4 +180,14 @@ export class CoursesController {
   ): Promise<CourseEnrollment[] | undefined> {
     return await this.coursesService.courseStatusUpdate(page, dto);
   }
+
+  /*
+   * Returns the latest 5 courses from the database
+   */
+  @UseGuards(AtGuard)
+  @Get()
+  @HttpCode(HttpStatus.OK)
+  async latestCourses(): Promise<Course[] | undefined> {
+    return await this.coursesService.latestCourses();
+  }
 }
