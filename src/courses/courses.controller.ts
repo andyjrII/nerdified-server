@@ -17,12 +17,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { CoursesService } from './courses.service';
-import {
-  Course,
-  CourseEnrollment,
-  ENROLLMENTSTATUS,
-  LEVEL,
-} from '@prisma/client';
+import { Course, CourseEnrollment, LEVEL } from '@prisma/client';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
 import { Public } from '../common/decorators/public.decorator';
@@ -52,6 +47,16 @@ export class CoursesController {
     @Query('level') level: LEVEL,
   ): Promise<Object> {
     return await this.coursesService.getCourses(page, search, level);
+  }
+
+  /*
+   * Returns the latest 5 courses from the database
+   */
+  @UseGuards(AtGuard)
+  @Get('latest_courses/4')
+  @HttpCode(HttpStatus.OK)
+  async latestCourses(): Promise<Course[] | undefined> {
+    return await this.coursesService.latestCourses();
   }
 
   /*
@@ -179,15 +184,5 @@ export class CoursesController {
     @Body() dto: UpdateStatusDto,
   ): Promise<CourseEnrollment[] | undefined> {
     return await this.coursesService.courseStatusUpdate(page, dto);
-  }
-
-  /*
-   * Returns the latest 5 courses from the database
-   */
-  @UseGuards(AtGuard)
-  @Get()
-  @HttpCode(HttpStatus.OK)
-  async latestCourses(): Promise<Course[] | undefined> {
-    return await this.coursesService.latestCourses();
   }
 }
