@@ -50,10 +50,10 @@ export class CoursesController {
   }
 
   /*
-   * Returns the latest 5 courses from the database
+   * Returns the latest 6 courses from the database
    */
   @UseGuards(AtGuard)
-  @Get('latest_courses/4')
+  @Get('latest/6')
   @HttpCode(HttpStatus.OK)
   async latestCourses(): Promise<Course[] | undefined> {
     return await this.coursesService.latestCourses();
