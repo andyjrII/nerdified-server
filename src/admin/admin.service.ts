@@ -15,10 +15,9 @@ export class AdminService {
   async getTotal(): Promise<Number[]> {
     const totalStudents = await this.prisma.student.count({});
     const totalCourses = await this.prisma.course.count({});
-    const totalProducts = await this.prisma.product.count({});
     const totalPosts = await this.prisma.blog.count({});
 
-    return [totalStudents, totalCourses, totalProducts, totalPosts];
+    return [totalStudents, totalCourses, totalPosts];
   }
 
   async getPaymentsByLevel(): Promise<

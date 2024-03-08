@@ -6,7 +6,6 @@ import { AuthModule } from './auth/auth.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { APP_GUARD } from '@nestjs/core';
 import { AtGuard } from './common/guards/at.guard';
-import { ProductsModule } from './products/products.module';
 import { BlogModule } from './blog/blog.module';
 import { AdminModule } from './admin/admin.module';
 
@@ -17,7 +16,6 @@ import { AdminModule } from './admin/admin.module';
     BlogModule,
     CoursesModule,
     PrismaModule,
-    ProductsModule,
     StudentsModule,
   ],
   providers: [
