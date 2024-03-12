@@ -79,13 +79,14 @@ export class StudentsController {
    * Update/upload a Student image by id
    */
   @UseGuards(AtGuard)
-  @Patch('upload/:id')
+  @Patch('upload/:email')
   @UseInterceptors(FileInterceptor('image', saveImageToStorage))
   @HttpCode(HttpStatus.OK)
   async uploadImage(
     @UploadedFile() image: Express.Multer.File,
-    @Param('id', ParseIntPipe) id: number,
+    @Param('email') email: string,
   ) {
+    const id = await this.studentsService.getIdByEmail(email);
     const imageName = image?.filename;
     if (!imageName) throw new BadRequestException('Invalid image format!');
     const prevImage = await this.studentsService.getImageById(id);

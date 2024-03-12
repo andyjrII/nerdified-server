@@ -48,6 +48,13 @@ export class StudentsService {
     });
   }
 
+  async getIdByEmail(email: string): Promise<number> {
+    const student = await this.prisma.student.findUnique({
+      where: { email },
+    });
+    return student.id;
+  }
+
   async uploadImage(
     id: number,
     imagePath: string,
