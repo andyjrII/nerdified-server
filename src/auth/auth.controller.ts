@@ -18,6 +18,7 @@ import { Public } from '../common/decorators/public.decorator';
 import { Tokens } from './types/tokens.type';
 import { UpdatePasswordDto } from './dto/update-password.dto';
 import { Student } from '@prisma/client';
+import { AdminSignupDto } from './dto/admin-signup.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -79,6 +80,16 @@ export class AuthController {
   }
 
   //Admin Endpoints
+
+  /*
+   * Signup endpoint for Super Admin
+   */
+  @Public()
+  @Post('admin_signup')
+  @HttpCode(HttpStatus.CREATED)
+  async adminSignup(@Body() dto: AdminSignupDto): Promise<[Tokens, string]> {
+    return await this.authService.adminSignup(dto);
+  }
 
   /*
    * Signin endpoint for Admin

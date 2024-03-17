@@ -12,6 +12,7 @@ import { JwtService } from '@nestjs/jwt/dist';
 import { SigninDto } from './dto/signin.dto';
 import { UpdatePasswordDto } from './dto/update-password.dto';
 import { Student } from '@prisma/client';
+import { AdminSignupDto } from './dto/admin-signup.dto';
 
 @Injectable()
 export class AuthService {
@@ -157,6 +158,27 @@ export class AuthService {
   }
 
   // Admin Functions
+
+  async adminSignup(dto: AdminSignupDto): Promise<[Tokens, string]> {
+    const password = await this.hashData(dto.password);
+    // Checks if Admin with email already exists
+    const checkAdmin = await this.prisma.admin.findFirst({
+      where: { role: 'SUPER' },
+    });
+    if (checkAdmin)
+      throw new BadRequestException('Super Admin already exists!');
+    const newAdmin = await this.prisma.admin.create({
+      data: {
+        email: dto.email,
+        password,
+        name: dto.name,
+        role: 'SUPER',
+      },
+    });
+    const tokens = await this.getTokens(newAdmin.id, newAdmin.email);
+    await this.updateRT(newAdmin.id, tokens.refresh_token);
+    return [tokens, newAdmin.role];
+  }
 
   async adminSignin(dto: SigninDto): Promise<[Tokens, string]> {
     const admin = await this.prisma.admin.findUnique({
