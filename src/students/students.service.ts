@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { ACADEMICLEVEL, CourseEnrollment, Student } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CourseEnrollmentDto } from './dto/course-enrollment.dto';
@@ -21,15 +17,6 @@ export class StudentsService {
 
   async courseEnrollment(dto: CourseEnrollmentDto): Promise<CourseEnrollment> {
     const student = await this.findStudent(dto.email);
-    const checkEnrollment = await this.prisma.courseEnrollment.findFirst({
-      where: {
-        studentId: student.id,
-        courseId: dto.courseId,
-      },
-    });
-    if (checkEnrollment)
-      throw new BadRequestException('Course has already been paid for!');
-
     const enrollment = await this.prisma.courseEnrollment.create({
       data: {
         studentId: student.id,
