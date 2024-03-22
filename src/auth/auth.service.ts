@@ -176,7 +176,7 @@ export class AuthService {
       },
     });
     const tokens = await this.getTokens(newAdmin.id, newAdmin.email);
-    await this.updateRT(newAdmin.id, tokens.refresh_token);
+    await this.adminUpdateRT(newAdmin.id, tokens.refresh_token);
     return [tokens, newAdmin.role];
   }
 
