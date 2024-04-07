@@ -1,1 +1,1 @@
-## Add forgot password functionality
+## Add forgot & reset password functionality 

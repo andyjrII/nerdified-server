@@ -66,6 +66,18 @@ export class StudentsController {
   }
 
   /*
+   * Checks if a Course has been Enrolled for by a Student using email param
+   */
+  @UseGuards(AtGuard)
+  @Get('course_enrolled/:courseId')
+  @HttpCode(HttpStatus.OK)
+  async courseAlreadyEnrolled(
+    @Param('courseId', ParseIntPipe) courseId: number,
+  ): Promise<CourseEnrollment> {
+    return await this.studentsService.courseAlreadyEnrolled(courseId);
+  }
+
+  /*
    * Returns the total number & total costs of Courses Enrolled by a Student using email param
    */
   @UseGuards(AtGuard)

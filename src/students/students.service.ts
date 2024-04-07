@@ -41,6 +41,15 @@ export class StudentsService {
     if (enrolled) return enrolled;
   }
 
+  async courseAlreadyEnrolled(courseId: number): Promise<CourseEnrollment> {
+    const isCourseEnrolled = await this.prisma.courseEnrollment.findFirst({
+      where: {
+        courseId
+      }
+    });
+    if (isCourseEnrolled) return isCourseEnrolled;
+  }
+
   async totalEnrolled(email: string): Promise<Number> {
     const student = await this.prisma.student.findUnique({ where: { email } });
     return await this.prisma.courseEnrollment.count({
