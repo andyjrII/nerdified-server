@@ -50,16 +50,6 @@ export class CoursesController {
   }
 
   /*
-   * Returns the latest 6 courses from the database
-   */
-  @UseGuards(AtGuard)
-  @Get('latest/6')
-  @HttpCode(HttpStatus.OK)
-  async latestCourses(): Promise<Course[] | undefined> {
-    return await this.coursesService.latestCourses();
-  }
-
-  /*
    * Returns a single Course by id
    */
   @Public()

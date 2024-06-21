@@ -97,16 +97,6 @@ export class CoursesService {
     return courses;
   }
 
-  async latestCourses(): Promise<Course[] | undefined> {
-    const courses = await this.prisma.course.findMany({
-      orderBy: {
-        deadline: 'asc',
-      },
-      take: 6,
-    });
-    return courses;
-  }
-
   async updateCourse(
     id: number,
     dto: UpdateCourseDto,
