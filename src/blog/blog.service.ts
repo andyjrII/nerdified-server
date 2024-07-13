@@ -47,6 +47,30 @@ export class BlogService {
     });
   }
 
+  async getLatestPosts(): Promise<Blog[]> {
+    const posts = await this.prisma.blog.findMany({
+      orderBy: {
+        datePosted: 'desc',
+      },
+      take: 3,
+    });
+    return posts;
+  }
+
+  async getLatestPostsImages(): Promise<String[]> {
+    const posts = await this.prisma.blog.findMany({
+      orderBy: {
+        datePosted: 'desc',
+      },
+      take: 3,
+    });
+    let imagePath = [];
+    for (let index = 0; index < posts.length; index++) {
+      imagePath.push(posts[index].imagePath);
+    }
+    return imagePath;
+  }
+
   async getImages(
     page: number,
     search: string,

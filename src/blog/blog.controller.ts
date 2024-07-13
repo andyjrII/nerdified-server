@@ -74,6 +74,26 @@ export class BlogController {
   }
 
   /*
+   * Return 3 latest Posts
+   */
+  @Public()
+  @Get('posts/latest')
+  @HttpCode(HttpStatus.OK)
+  async getLatestPosts(): Promise<Blog[]> {
+    return await this.blogService.getLatestPosts();
+  }
+
+  /*
+   * Returns images of 3 latest posts
+   */
+  @Public()
+  @Get('posts/latest/images')
+  @HttpCode(HttpStatus.OK)
+  async getLatestPostsImages(): Promise<String[]> {
+    return await this.blogService.getLatestPostsImages();
+  }
+
+  /*
    * Return the image for a particular Post by imagePath
    */
   @Public()
