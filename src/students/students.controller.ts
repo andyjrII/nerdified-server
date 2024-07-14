@@ -17,7 +17,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { StudentsService } from './students.service';
-import { ACADEMICLEVEL, CourseEnrollment, Student } from '@prisma/client';
+import { CourseEnrollment, Student } from '@prisma/client';
 import { CourseEnrollmentDto } from './dto/course-enrollment.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -134,9 +134,8 @@ export class StudentsController {
   async getStudents(
     @Param('page', ParseIntPipe) page: number,
     @Query('search') search: string,
-    @Query('academicLevel') academicLevel: ACADEMICLEVEL,
   ): Promise<Object> {
-    return await this.studentsService.getStudents(page, search, academicLevel);
+    return await this.studentsService.getStudents(page, search);
   }
 
   /*

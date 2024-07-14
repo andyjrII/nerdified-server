@@ -31,7 +31,6 @@ export class AuthService {
         phoneNumber: dto.phoneNumber,
         name: dto.name,
         address: dto.address,
-        academicLevel: dto.academicLevel,
       },
     });
     const tokens = await this.getTokens(newStudent.id, newStudent.email);

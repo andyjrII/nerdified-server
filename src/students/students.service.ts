@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { ACADEMICLEVEL, CourseEnrollment, Student } from '@prisma/client';
+import { CourseEnrollment, Student } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CourseEnrollmentDto } from './dto/course-enrollment.dto';
 
@@ -44,8 +44,8 @@ export class StudentsService {
   async courseAlreadyEnrolled(courseId: number): Promise<CourseEnrollment> {
     const isCourseEnrolled = await this.prisma.courseEnrollment.findFirst({
       where: {
-        courseId
-      }
+        courseId,
+      },
     });
     if (isCourseEnrolled) return isCourseEnrolled;
   }
@@ -91,12 +91,7 @@ export class StudentsService {
     return student.imagePath;
   }
 
-  async getStudents(
-    page: number,
-    search: string,
-    academicLevel: ACADEMICLEVEL,
-  ): Promise<Object> {
-    if (!academicLevel) academicLevel = undefined;
+  async getStudents(page: number, search: string): Promise<Object> {
     const [students, totalStudents] = await Promise.all([
       await this.prisma.student.findMany({
         where: {
@@ -108,10 +103,6 @@ export class StudentsService {
               email: { contains: search, mode: 'insensitive' },
             },
           ],
-          academicLevel:
-            academicLevel !== 'OLEVEL' || 'ND' || 'HND' || 'BSC' || 'GRADUATE'
-              ? academicLevel
-              : undefined,
         },
         skip: 20 * (page - 1),
         take: 20,

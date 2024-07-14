@@ -1,4 +1,3 @@
-import { ACADEMICLEVEL } from '@prisma/client';
 import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
 
 export class SignupDto {
@@ -21,8 +20,4 @@ export class SignupDto {
   @IsNotEmpty()
   @IsString()
   address: string;
-
-  @IsNotEmpty()
-  @IsString()
-  academicLevel: ACADEMICLEVEL;
 }
