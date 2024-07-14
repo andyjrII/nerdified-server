@@ -11,20 +11,19 @@ datasource db {
 }
 
 model Student {
-  id            Int                @id @default(autoincrement())
-  name          String?
-  email         String             @unique
-  phoneNumber   String?            @unique
-  password      String
-  refreshToken  String?
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
-  imagePath     String?
-  address       String
-  academicLevel ACADEMICLEVEL
-  courses       CourseEnrollment[]
-  review        Review[]
-  wishlist      Wishlist[]
+  id           Int                @id @default(autoincrement())
+  name         String?
+  email        String             @unique
+  phoneNumber  String?            @unique
+  password     String
+  refreshToken String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  imagePath    String?
+  address      String
+  courses      CourseEnrollment[]
+  review       Review[]
+  wishlist     Wishlist[]
 
   @@map("students")
 }
@@ -44,15 +43,19 @@ model Course {
 }
 
 model CourseEnrollment {
-  id           Int              @id @default(autoincrement())
-  student      Student          @relation(fields: [studentId], references: [id])
-  studentId    Int
-  course       Course           @relation(fields: [courseId], references: [id])
-  courseId     Int
-  dateEnrolled DateTime         @default(now())
-  paidAmount   Decimal          @db.Decimal(10, 2)
-  status       ENROLLMENTSTATUS @default(PENDING)
-  reference    String
+  id              Int              @id @default(autoincrement())
+  student         Student          @relation(fields: [studentId], references: [id])
+  studentId       Int
+  course          Course           @relation(fields: [courseId], references: [id])
+  courseId        Int
+  dateEnrolled    DateTime         @default(now())
+  paidAmount      Decimal          @db.Decimal(10, 2)
+  status          ENROLLMENTSTATUS @default(PENDING)
+  reference       String
+  classDays       ClassDay[]
+  sessionsPerWeek Int              @default(1) // Assuming minimum of 1 session per week
+  preferredTime   TimeOfDay        @default(MORNING)
+  mode            Mode             @default(ONLINE)
 
   @@map("courseenrolment")
 }
@@ -115,18 +118,25 @@ enum ENROLLMENTSTATUS {
   FINISHED
 }
 
-enum ACADEMICLEVEL {
-  OLEVEL
-  ND
-  HND
-  BSC
-  GRADUATE
+enum ClassDay {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
 }
 
-enum PLATFORM {
-  MOBILE
-  WEB
-  DESKTOP
+enum TimeOfDay {
+  MORNING
+  AFTERNOON
+  EVENING
+}
+
+enum Mode {
+  ONLINE
+  ONSITE
 }
 
 enum ROLE {

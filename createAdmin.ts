@@ -3,10 +3,14 @@ import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
+const EMAIL = process.env.EMAIL;
+const PASSWORD = process.env.PASSWORD;
+const NAME = process.env.NAME;
+
 async function createAdmin() {
-  const email = 'nerdified.get@gmail.com';
-  const password = 'SlyF0x@87';
-  const name = 'Andy James';
+  const email = EMAIL;
+  const password = PASSWORD;
+  const name = NAME;
   const role = 'SUPER';
 
   // Hash the password
