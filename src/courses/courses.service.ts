@@ -25,10 +25,31 @@ export class CoursesService {
         orderBy: {
           updatedAt: 'asc',
         },
+        include: {
+          review: {
+            select: {
+              rating: true,
+            },
+          },
+        },
       }),
       this.prisma.course.count({}),
     ]);
-    return { courses, totalCourses };
+
+    const coursesWithAverageRating = courses.map((course) => {
+      const totalRatings = course.review.length;
+      const averageRating = totalRatings
+        ? course.review.reduce((acc, review) => acc + review.rating, 0) /
+          totalRatings
+        : null;
+
+      return {
+        ...course,
+        averageRating,
+      };
+    });
+
+    return { courses: coursesWithAverageRating, totalCourses };
   }
 
   async getCourseById(id: number): Promise<Course> {
