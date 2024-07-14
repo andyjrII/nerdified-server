@@ -8,6 +8,8 @@ import { APP_GUARD } from '@nestjs/core';
 import { AtGuard } from './common/guards/at.guard';
 import { BlogModule } from './blog/blog.module';
 import { AdminModule } from './admin/admin.module';
+import { ReviewsModule } from './reviews/reviews.module';
+import { WishlistModule } from './wishlist/wishlist.module';
 
 @Module({
   imports: [
@@ -17,6 +19,8 @@ import { AdminModule } from './admin/admin.module';
     CoursesModule,
     PrismaModule,
     StudentsModule,
+    ReviewsModule,
+    WishlistModule,
   ],
   providers: [
     PrismaService,
