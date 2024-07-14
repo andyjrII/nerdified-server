@@ -1,4 +1,3 @@
-import { LEVEL } from '@prisma/client';
 import { IsNumberString, IsOptional, IsString } from 'class-validator';
 
 export class UpdateCourseDto {
@@ -9,14 +8,4 @@ export class UpdateCourseDto {
   @IsOptional()
   @IsNumberString()
   price?: number;
-
-  @IsOptional()
-  @IsString()
-  description?: string;
-
-  @IsOptional()
-  deadline?: Date;
-
-  @IsOptional()
-  level?: LEVEL;
 }

@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { Course, CourseEnrollment, LEVEL } from '@prisma/client';
+import { Course, CourseEnrollment } from '@prisma/client';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
@@ -10,12 +10,7 @@ import { CourseEnrollmentSearchDto } from './dto/enrollment-search.dto';
 export class CoursesService {
   constructor(private prisma: PrismaService) {}
 
-  async getCourses(
-    page: number,
-    search: string,
-    level: LEVEL,
-  ): Promise<Object> {
-    if (!level) level = undefined;
+  async getCourses(page: number, search: string): Promise<Object> {
     const [courses, totalCourses] = await Promise.all([
       this.prisma.course.findMany({
         where: {
@@ -24,15 +19,11 @@ export class CoursesService {
               title: { contains: search, mode: 'insensitive' },
             },
           ],
-          level:
-            level !== 'BEGINNER' || 'INTERMEDIATE' || 'ADVANCE'
-              ? level
-              : undefined,
         },
         skip: (page - 1) * 20,
         take: 20,
         orderBy: {
-          deadline: 'asc',
+          updatedAt: 'asc',
         },
       }),
       this.prisma.course.count({}),
@@ -46,11 +37,11 @@ export class CoursesService {
     });
   }
 
-  async getOutline(id: number): Promise<string> {
+  async getDescription(id: number): Promise<string> {
     const course = await this.prisma.course.findUnique({
       where: { id },
     });
-    return course.outlinePath;
+    return course.description;
   }
 
   async uploadDocument(
@@ -59,7 +50,7 @@ export class CoursesService {
   ): Promise<Course | undefined> {
     const course = await this.prisma.course.update({
       where: { id },
-      data: { outlinePath: documentPath },
+      data: { description: documentPath },
     });
     return course;
   }
@@ -75,9 +66,6 @@ export class CoursesService {
       data: {
         title: dto.title,
         price: dto.price,
-        level: dto.level,
-        deadline: new Date(dto.deadline),
-        description: dto.description,
       },
     });
     if (course) return course;
@@ -111,9 +99,6 @@ export class CoursesService {
       data: {
         price: dto.price || undefined,
         title: dto.title || undefined,
-        description: dto.description || undefined,
-        deadline: dto.deadline || undefined,
-        level: dto.level || undefined,
       },
     });
 

@@ -17,7 +17,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { CoursesService } from './courses.service';
-import { Course, CourseEnrollment, LEVEL } from '@prisma/client';
+import { Course, CourseEnrollment } from '@prisma/client';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
 import { Public } from '../common/decorators/public.decorator';
@@ -44,9 +44,8 @@ export class CoursesController {
   async getCourses(
     @Param('page', ParseIntPipe) page: number,
     @Query('search') search: string,
-    @Query('level') level: LEVEL,
   ): Promise<Object> {
-    return await this.coursesService.getCourses(page, search, level);
+    return await this.coursesService.getCourses(page, search);
   }
 
   /*
@@ -69,7 +68,7 @@ export class CoursesController {
     @Param('id', ParseIntPipe) id: number,
     @Res() res,
   ): Promise<string> {
-    const outlinePath = await this.coursesService.getOutline(id);
+    const outlinePath = await this.coursesService.getDescription(id);
     if (outlinePath) {
       return res.sendFile(outlinePath, { root: './documents' });
     }
@@ -119,7 +118,7 @@ export class CoursesController {
   async deleteCourse(
     @Param('id', ParseIntPipe) id: number,
   ): Promise<Course | undefined> {
-    const documentPath = await this.coursesService.getOutline(id);
+    const documentPath = await this.coursesService.getDescription(id);
     if (documentPath) {
       const documentFolderPath = join(process.cwd(), 'documents');
       const fullDocumentPath = join(documentFolderPath + '/' + documentPath);
@@ -141,7 +140,7 @@ export class CoursesController {
   ) {
     const documentName = file?.filename;
     if (!documentName) throw new BadRequestException('Invalid image format!');
-    const prevDocument = await this.coursesService.getOutline(id);
+    const prevDocument = await this.coursesService.getDescription(id);
     if (prevDocument) {
       const documentFolderPath = join(process.cwd(), 'images');
       const fullDocumentPath = join(documentFolderPath + '/' + prevDocument);

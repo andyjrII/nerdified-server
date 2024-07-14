@@ -20,47 +20,6 @@ export class AdminService {
     return [totalStudents, totalCourses, totalPosts];
   }
 
-  async getPaymentsByLevel(): Promise<
-    { level: string; sumOfPaidAmount: number }[]
-  > {
-    const enrollments = await this.prisma.courseEnrollment.findMany({
-      where: {
-        course: {
-          level: {
-            in: ['BEGINNER', 'INTERMEDIATE', 'ADVANCE'],
-          },
-        },
-      },
-      select: {
-        course: {
-          select: {
-            level: true,
-          },
-        },
-        paidAmount: true,
-      },
-    });
-
-    const groupedByLevel = enrollments.reduce((acc, { course, paidAmount }) => {
-      ``;
-      const level = course.level;
-      // Convert paidAmount to a string and then to a number
-      const paidAmountString = paidAmount.toString();
-      const paidAmountNumber = parseFloat(paidAmountString);
-      acc[level] = (acc[level] || 0) + paidAmountNumber;
-      return acc;
-    }, {});
-
-    const result = Object.entries(groupedByLevel).map(
-      ([level, sumOfPaidAmount]) => ({
-        level,
-        sumOfPaidAmount,
-      }),
-    );
-
-    return result as { level: string; sumOfPaidAmount: number }[];
-  }
-
   async getPaymentsByMonth(): Promise<any[]> {
     const enrollments = await this.prisma.courseEnrollment.findMany({
       select: {

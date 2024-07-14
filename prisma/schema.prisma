@@ -23,6 +23,8 @@ model Student {
   address       String
   academicLevel ACADEMICLEVEL
   courses       CourseEnrollment[]
+  review        Review[]
+  wishlist      Wishlist[]
 
   @@map("students")
 }
@@ -30,14 +32,13 @@ model Student {
 model Course {
   id          Int                @id @default(autoincrement())
   title       String             @unique
-  description String
-  level       LEVEL
   price       Decimal            @default(0) @db.Decimal(10, 2)
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
   enrollments CourseEnrollment[]
-  deadline    DateTime
-  outlinePath String?
+  description String?
+  review      Review[]
+  wishlist    Wishlist[]
 
   @@map("courses")
 }
@@ -54,6 +55,31 @@ model CourseEnrollment {
   reference    String
 
   @@map("courseenrolment")
+}
+
+model Review {
+  id        Int      @id @default(autoincrement())
+  student   Student  @relation(fields: [studentId], references: [id])
+  studentId Int
+  course    Course   @relation(fields: [courseId], references: [id])
+  courseId  Int
+  rating    Int
+  comment   String
+  createdAt DateTime @default(now())
+
+  @@map("reviews")
+}
+
+model Wishlist {
+  id        Int      @id @default(autoincrement())
+  student   Student  @relation(fields: [studentId], references: [id])
+  studentId Int
+  course    Course   @relation(fields: [courseId], references: [id])
+  courseId  Int
+  createdAt DateTime @default(now())
+
+  @@unique([studentId, courseId])
+  @@map("wishlists")
 }
 
 model Blog {
@@ -80,12 +106,6 @@ model Admin {
   role         ROLE     @default(SUB)
 
   @@map("admin")
-}
-
-enum LEVEL {
-  BEGINNER
-  INTERMEDIATE
-  ADVANCE
 }
 
 enum ENROLLMENTSTATUS {

@@ -31,18 +31,6 @@ export class AdminController {
   }
 
   /*
-   * Get total payments for beginner, intermediate and advance courses
-   */
-  @UseGuards(AtGuard)
-  @Get('payments_level')
-  @HttpCode(HttpStatus.OK)
-  async getPaymentsByLevel(): Promise<
-    { level: string; sumOfPaidAmount: number }[]
-  > {
-    return await this.adminService.getPaymentsByLevel();
-  }
-
-  /*
    * Get total payments for each months
    */
   @UseGuards(AtGuard)
