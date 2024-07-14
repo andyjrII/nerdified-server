@@ -68,7 +68,7 @@ export class CoursesController {
     @Param('id', ParseIntPipe) id: number,
     @Res() res,
   ): Promise<string> {
-    const outlinePath = await this.coursesService.getDescription(id);
+    const outlinePath = await this.coursesService.getDetails(id);
     if (outlinePath) {
       return res.sendFile(outlinePath, { root: './documents' });
     }
@@ -118,7 +118,7 @@ export class CoursesController {
   async deleteCourse(
     @Param('id', ParseIntPipe) id: number,
   ): Promise<Course | undefined> {
-    const documentPath = await this.coursesService.getDescription(id);
+    const documentPath = await this.coursesService.getDetails(id);
     if (documentPath) {
       const documentFolderPath = join(process.cwd(), 'documents');
       const fullDocumentPath = join(documentFolderPath + '/' + documentPath);
@@ -140,7 +140,7 @@ export class CoursesController {
   ) {
     const documentName = file?.filename;
     if (!documentName) throw new BadRequestException('Invalid image format!');
-    const prevDocument = await this.coursesService.getDescription(id);
+    const prevDocument = await this.coursesService.getDetails(id);
     if (prevDocument) {
       const documentFolderPath = join(process.cwd(), 'images');
       const fullDocumentPath = join(documentFolderPath + '/' + prevDocument);

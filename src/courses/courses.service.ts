@@ -37,11 +37,11 @@ export class CoursesService {
     });
   }
 
-  async getDescription(id: number): Promise<string> {
+  async getDetails(id: number): Promise<string> {
     const course = await this.prisma.course.findUnique({
       where: { id },
     });
-    return course.description;
+    return course.details;
   }
 
   async uploadDocument(
@@ -50,7 +50,7 @@ export class CoursesService {
   ): Promise<Course | undefined> {
     const course = await this.prisma.course.update({
       where: { id },
-      data: { description: documentPath },
+      data: { details: documentPath },
     });
     return course;
   }
