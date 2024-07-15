@@ -15,6 +15,7 @@ export class ReviewsController {
 
   @Post()
   async createReview(@Body() createReviewDto: CreateReviewDto) {
+    console.log('Called');
     return this.reviewsService.createReview(createReviewDto);
   }
 

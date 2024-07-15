@@ -52,10 +52,10 @@ model CourseEnrollment {
   paidAmount      Decimal          @db.Decimal(10, 2)
   status          ENROLLMENTSTATUS @default(PENDING)
   reference       String
-  classDays       ClassDay[]
+  classDays       CLASSDAY[]
   sessionsPerWeek Int              @default(1) // Assuming minimum of 1 session per week
-  preferredTime   TimeOfDay        @default(MORNING)
-  mode            Mode             @default(ONLINE)
+  preferredTime   TIMEOFDAY        @default(MORNING)
+  mode            MODE             @default(ONLINE)
 
   @@map("courseenrolment")
 }
@@ -118,7 +118,7 @@ enum ENROLLMENTSTATUS {
   FINISHED
 }
 
-enum ClassDay {
+enum CLASSDAY {
   MONDAY
   TUESDAY
   WEDNESDAY
@@ -127,13 +127,13 @@ enum ClassDay {
   SATURDAY
 }
 
-enum TimeOfDay {
+enum TIMEOFDAY {
   MORNING
   AFTERNOON
   EVENING
 }
 
-enum Mode {
+enum MODE {
   ONLINE
   ONSITE
 }

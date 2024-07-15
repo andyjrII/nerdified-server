@@ -1,9 +1,9 @@
-import { IsNotEmpty, IsNumberString, IsString } from 'class-validator';
+import { IsNotEmpty, IsString } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class CreateReviewDto {
   @IsNotEmpty()
-  @IsNumberString()
+  @Transform((value: any) => Number.parseInt(value))
   rating: number;
 
   @IsNotEmpty()

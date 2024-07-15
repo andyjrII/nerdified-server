@@ -1,5 +1,12 @@
+import { TIMEOFDAY, MODE, CLASSDAY } from '@prisma/client';
 import { Transform } from 'class-transformer';
-import { IsEmail, IsNotEmpty, IsNumberString, IsString } from 'class-validator';
+import {
+  IsArray,
+  IsEmail,
+  IsNotEmpty,
+  IsNumberString,
+  IsString,
+} from 'class-validator';
 
 export class CourseEnrollmentDto {
   @IsNotEmpty()
@@ -17,4 +24,16 @@ export class CourseEnrollmentDto {
   @IsString()
   @IsNotEmpty()
   reference: string;
+
+  @IsArray()
+  @IsNotEmpty()
+  classDays: CLASSDAY[];
+
+  @IsString()
+  @IsNotEmpty()
+  preferredTime: TIMEOFDAY;
+
+  @IsString()
+  @IsNotEmpty()
+  mode: MODE;
 }

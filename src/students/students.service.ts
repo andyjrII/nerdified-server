@@ -26,6 +26,10 @@ export class StudentsService {
         courseId: dto.courseId,
         paidAmount: dto.amount,
         reference: dto.reference,
+        preferredTime: dto.preferredTime,
+        mode: dto.mode,
+        classDays: dto.classDays,
+        sessionsPerWeek: dto.classDays.length,
       },
     });
     if (enrollment) return enrollment;
