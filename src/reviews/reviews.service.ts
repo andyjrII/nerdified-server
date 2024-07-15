@@ -24,6 +24,9 @@ export class ReviewsService {
   async getCourseReviews(courseId: number) {
     return this.prisma.review.findMany({
       where: { courseId },
+      orderBy: {
+        createdAt: 'desc',
+      },
       include: {
         student: true,
         course: true,
