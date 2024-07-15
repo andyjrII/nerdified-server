@@ -6,14 +6,17 @@ import {
   Body,
   Param,
   ParseIntPipe,
+  UseGuards,
 } from '@nestjs/common';
 import { WishlistService } from './wishlist.service';
 import { WishListDto } from './dto/wishlist.dto';
+import { AtGuard } from '../common/guards/at.guard';
 
 @Controller('wishlist')
 export class WishlistController {
   constructor(private readonly wishlistService: WishlistService) {}
 
+  @UseGuards(AtGuard)
   @Post('add')
   async addToWishlist(@Body() addToWishlistDto: WishListDto) {
     return this.wishlistService.addToWishlist(addToWishlistDto);

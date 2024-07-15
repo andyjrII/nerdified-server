@@ -31,6 +31,7 @@ export class CoursesService {
               rating: true,
             },
           },
+          wishlist: true,
         },
       }),
       this.prisma.course.count({}),

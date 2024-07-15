@@ -62,9 +62,9 @@ export class CoursesController {
    * Returns the outline of a Course by id
    */
   @Public()
-  @Get('get-outline/:id')
+  @Get('details/:id')
   @HttpCode(HttpStatus.OK)
-  async getOutline(
+  async getCourseDetails(
     @Param('id', ParseIntPipe) id: number,
     @Res() res,
   ): Promise<string> {

@@ -10,6 +10,9 @@ export class StudentsService {
   async findStudent(email: string): Promise<Student> {
     const student = await this.prisma.student.findUnique({
       where: { email: email },
+      include: {
+        wishlist: true,
+      },
     });
     if (!student) throw new NotFoundException('Student not found!');
     return student;

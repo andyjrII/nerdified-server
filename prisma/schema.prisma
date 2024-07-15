@@ -125,7 +125,6 @@ enum ClassDay {
   THURSDAY
   FRIDAY
   SATURDAY
-  SUNDAY
 }
 
 enum TimeOfDay {
