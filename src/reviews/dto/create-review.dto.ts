@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class CreateReviewDto {
@@ -11,8 +11,8 @@ export class CreateReviewDto {
   comment: string;
 
   @IsNotEmpty()
-  @Transform((value: any) => Number.parseInt(value))
-  studentId: number;
+  @IsEmail()
+  email: string;
 
   @IsNotEmpty()
   @Transform((value: any) => Number.parseInt(value))
