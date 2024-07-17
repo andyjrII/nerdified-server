@@ -6,16 +6,16 @@ import { CreateReviewDto } from './dto/create-review.dto';
 export class ReviewsService {
   constructor(private prisma: PrismaService) {}
 
-  async createReview(createReviewDto: CreateReviewDto) {
+  async createReview(dto: CreateReviewDto) {
     return this.prisma.review.create({
       data: {
-        rating: createReviewDto.rating,
-        comment: createReviewDto.comment,
+        rating: dto.rating,
+        comment: dto.comment,
         student: {
-          connect: { id: createReviewDto.studentId },
+          connect: { id: dto.studentId },
         },
         course: {
-          connect: { id: createReviewDto.courseId },
+          connect: { id: dto.courseId },
         },
       },
     });

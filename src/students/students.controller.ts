@@ -26,6 +26,7 @@ import {
 } from '../common/helpers/image.storage';
 import { AtGuard } from '../common/guards/at.guard';
 import { join } from 'path';
+import { Public } from '../common/decorators/public.decorator';
 
 @Controller('students')
 export class StudentsController {
@@ -50,6 +51,7 @@ export class StudentsController {
   async courseEnrollment(
     @Body() dto: CourseEnrollmentDto,
   ): Promise<CourseEnrollment> {
+    console.log(dto);
     return await this.studentsService.courseEnrollment(dto);
   }
 
@@ -113,11 +115,37 @@ export class StudentsController {
   /*
    * Returns a Student image by email
    */
-  @UseGuards(AtGuard)
+  @Public()
   @Get('image/:email')
   @HttpCode(HttpStatus.OK)
   async getImage(@Param('email') email: string, @Res() res): Promise<string> {
     const imagePath = await this.studentsService.getImage(email);
+    if (imagePath) {
+      return res.sendFile(imagePath, { root: './images' });
+    }
+  }
+
+  /*
+   * Returns an array of Student imagepaths by an array of emails
+   */
+  @Public()
+  @Post('imagepaths')
+  @HttpCode(HttpStatus.OK)
+  async getImagePaths(@Body() emails: string[]): Promise<string[]> {
+    return await this.studentsService.getImages(emails);
+  }
+
+  /*
+   * Return the image for a particular Student by imageurl
+   */
+  @Public()
+  @Get('student/image/:imageurl')
+  @HttpCode(HttpStatus.OK)
+  async getImageByPath(
+    @Param('imageurl') imageurl: string,
+    @Res() res,
+  ): Promise<string> {
+    const imagePath = await this.studentsService.getImageByPath(imageurl);
     if (imagePath) {
       return res.sendFile(imagePath, { root: './images' });
     }

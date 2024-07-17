@@ -10,6 +10,7 @@ import {
 import { ReviewsService } from './reviews.service';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { AtGuard } from '../common/guards/at.guard';
+import { Public } from '../common/decorators/public.decorator';
 
 @Controller('reviews')
 export class ReviewsController {
@@ -17,12 +18,11 @@ export class ReviewsController {
 
   @UseGuards(AtGuard)
   @Post()
-  async createReview(@Body() createReviewDto: CreateReviewDto) {
-    console.log('Called');
-    return this.reviewsService.createReview(createReviewDto);
+  async createReview(@Body() dto: CreateReviewDto) {
+    return this.reviewsService.createReview(dto);
   }
 
-  @UseGuards(AtGuard)
+  @Public()
   @Get('course/:courseId')
   async getCourseReviews(@Param('courseId', ParseIntPipe) courseId: number) {
     return this.reviewsService.getCourseReviews(courseId);

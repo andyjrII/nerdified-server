@@ -6,20 +6,20 @@ import { WishListDto } from './dto/wishlist.dto';
 export class WishlistService {
   constructor(private prisma: PrismaService) {}
 
-  async addToWishlist(addToWishlistDto: WishListDto) {
+  async addToWishlist(dto: WishListDto) {
     return this.prisma.wishlist.create({
       data: {
-        studentId: addToWishlistDto.studentId,
-        courseId: addToWishlistDto.courseId,
+        studentId: dto.studentId,
+        courseId: dto.courseId,
       },
     });
   }
 
-  async removeFromWishlist(removeFromWishlistDto: WishListDto) {
+  async removeFromWishlist(dto: WishListDto) {
     return this.prisma.wishlist.deleteMany({
       where: {
-        studentId: removeFromWishlistDto.studentId,
-        courseId: removeFromWishlistDto.courseId,
+        studentId: dto.studentId,
+        courseId: dto.courseId,
       },
     });
   }

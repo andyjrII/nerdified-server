@@ -18,13 +18,13 @@ export class WishlistController {
 
   @UseGuards(AtGuard)
   @Post('add')
-  async addToWishlist(@Body() addToWishlistDto: WishListDto) {
-    return this.wishlistService.addToWishlist(addToWishlistDto);
+  async addToWishlist(@Body() dto: WishListDto) {
+    return this.wishlistService.addToWishlist(dto);
   }
 
   @Delete('remove')
-  async removeFromWishlist(@Body() removeFromWishlistDto: WishListDto) {
-    return this.wishlistService.removeFromWishlist(removeFromWishlistDto);
+  async removeFromWishlist(@Body() dto: WishListDto) {
+    return this.wishlistService.removeFromWishlist(dto);
   }
 
   @Get(':studentId')

@@ -89,11 +89,32 @@ export class StudentsService {
     return student.imagePath;
   }
 
+  async getImages(emails: string[]): Promise<string[]> {
+    const students = await this.prisma.student.findMany({
+      where: {
+        email: {
+          in: emails,
+        },
+      },
+      select: {
+        imagePath: true,
+      },
+    });
+    return students.map((student) => student.imagePath);
+  }
+
   async getImageById(id: number): Promise<string> {
     const student = await this.prisma.student.findUnique({
       where: {
         id,
       },
+    });
+    return student.imagePath;
+  }
+
+  async getImageByPath(imageUrl: string): Promise<string> {
+    const student = await this.prisma.student.findFirst({
+      where: { imagePath: imageUrl },
     });
     return student.imagePath;
   }
