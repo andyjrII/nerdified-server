@@ -30,4 +30,10 @@ export class WishlistService {
       include: { course: true },
     });
   }
+
+  async getWishlistNumber(studentId: number) {
+    return this.prisma.wishlist.count({
+      where: { studentId },
+    });
+  }
 }

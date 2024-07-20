@@ -31,4 +31,9 @@ export class WishlistController {
   async getWishlist(@Param('studentId', ParseIntPipe) studentId: number) {
     return this.wishlistService.getWishlist(studentId);
   }
+
+  @Get('total/:studentId')
+  async getWishlistNumber(@Param('studentId', ParseIntPipe) studentId: number) {
+    return this.wishlistService.getWishlistNumber(studentId);
+  }
 }

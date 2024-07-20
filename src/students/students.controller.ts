@@ -51,7 +51,6 @@ export class StudentsController {
   async courseEnrollment(
     @Body() dto: CourseEnrollmentDto,
   ): Promise<CourseEnrollment> {
-    console.log(dto);
     return await this.studentsService.courseEnrollment(dto);
   }
 
