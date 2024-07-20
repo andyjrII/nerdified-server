@@ -10,9 +10,5 @@ export class UpdatePostDto {
   postUrl?: string;
 
   @IsOptional()
-  @IsString()
-  description?: string;
-
-  @IsOptional()
   datePosted?: Date;
 }

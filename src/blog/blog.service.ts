@@ -21,9 +21,6 @@ export class BlogService {
             {
               title: { contains: search, mode: 'insensitive' },
             },
-            {
-              description: { contains: search, mode: 'insensitive' },
-            },
           ],
           datePosted: {
             gte: startDate ? new Date(startDate) : undefined,
@@ -83,9 +80,6 @@ export class BlogService {
           {
             title: { contains: search, mode: 'insensitive' },
           },
-          {
-            description: { contains: search, mode: 'insensitive' },
-          },
         ],
         datePosted: {
           gte: startDate ? new Date(startDate) : undefined,
@@ -141,7 +135,6 @@ export class BlogService {
         title: dto.title,
         postUrl: dto.postUrl,
         datePosted: new Date(dto.datePosted),
-        description: dto.description,
       },
     });
     if (post) return post;
@@ -159,7 +152,6 @@ export class BlogService {
       data: {
         title: dto.title || undefined,
         postUrl,
-        description: dto.description || undefined,
         datePosted: dto.datePosted || undefined,
       },
     });

@@ -22,16 +22,19 @@ export class WishlistController {
     return this.wishlistService.addToWishlist(dto);
   }
 
+  @UseGuards(AtGuard)
   @Delete('remove')
   async removeFromWishlist(@Body() dto: WishListDto) {
     return this.wishlistService.removeFromWishlist(dto);
   }
 
+  @UseGuards(AtGuard)
   @Get(':studentId')
   async getWishlist(@Param('studentId', ParseIntPipe) studentId: number) {
     return this.wishlistService.getWishlist(studentId);
   }
 
+  @UseGuards(AtGuard)
   @Get('total/:studentId')
   async getWishlistNumber(@Param('studentId', ParseIntPipe) studentId: number) {
     return this.wishlistService.getWishlistNumber(studentId);
