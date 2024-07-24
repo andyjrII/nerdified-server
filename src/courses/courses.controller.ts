@@ -78,7 +78,7 @@ export class CoursesController {
    * Return 5 latest Courses
    */
   @Public()
-  @Get('/latest/5')
+  @Get('/latest/4')
   @HttpCode(HttpStatus.OK)
   async getLatestPosts(): Promise<Course[]> {
     return await this.coursesService.getLatestCourses();
