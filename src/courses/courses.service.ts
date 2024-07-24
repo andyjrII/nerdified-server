@@ -66,6 +66,16 @@ export class CoursesService {
     return course.details;
   }
 
+  async getLatestCourses(): Promise<Course[]> {
+    const courses = await this.prisma.course.findMany({
+      orderBy: {
+        updatedAt: 'desc',
+      },
+      take: 5,
+    });
+    return courses;
+  }
+
   async uploadDocument(
     id: number,
     documentPath: string,

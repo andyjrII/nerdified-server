@@ -74,6 +74,16 @@ export class CoursesController {
     }
   }
 
+  /*
+   * Return 5 latest Courses
+   */
+  @Public()
+  @Get('/latest/5')
+  @HttpCode(HttpStatus.OK)
+  async getLatestPosts(): Promise<Course[]> {
+    return await this.coursesService.getLatestCourses();
+  }
+
   // Admin endpoints
 
   /*
