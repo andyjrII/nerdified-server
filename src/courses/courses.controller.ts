@@ -75,13 +75,18 @@ export class CoursesController {
   }
 
   /*
-   * Return 5 latest Courses
+   * Return 4 latest Courses
    */
   @Public()
   @Get('/latest/4')
   @HttpCode(HttpStatus.OK)
   async getLatestPosts(): Promise<Course[]> {
     return await this.coursesService.getLatestCourses();
+  }
+
+  @Get('top-enrolled/4')
+  async getTopEnrolledCourses(): Promise<Course[]> {
+    return this.coursesService.getTopEnrolledCourses();
   }
 
   // Admin endpoints

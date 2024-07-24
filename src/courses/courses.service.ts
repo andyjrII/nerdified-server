@@ -76,6 +76,42 @@ export class CoursesService {
     return courses;
   }
 
+  async getTopEnrolledCourses(): Promise<Course[]> {
+    const topCourses = await this.prisma.courseEnrollment.groupBy({
+      by: ['courseId'],
+      _count: {
+        courseId: true,
+      },
+      _max: {
+        dateEnrolled: true,
+      },
+      orderBy: [
+        {
+          _count: {
+            courseId: 'desc',
+          },
+        },
+        {
+          _max: {
+            dateEnrolled: 'desc',
+          },
+        },
+      ],
+      take: 4,
+    });
+
+    // Fetch course details for the top courses
+    const courses = await this.prisma.course.findMany({
+      where: {
+        id: {
+          in: topCourses.map((course) => course.courseId),
+        },
+      },
+    });
+
+    return courses;
+  }
+
   async uploadDocument(
     id: number,
     documentPath: string,
