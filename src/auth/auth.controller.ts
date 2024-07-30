@@ -69,7 +69,12 @@ export class AuthController {
   @Public()
   @Post('signout')
   @HttpCode(HttpStatus.OK)
-  async signout(@Query('email') email: string) {
+  async signout(
+    @Query('email') email: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    res.clearCookie('access_token');
+    res.clearCookie('refresh_token');
     return await this.authService.signout(email);
   }
 
