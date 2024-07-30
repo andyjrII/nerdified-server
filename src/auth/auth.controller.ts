@@ -6,8 +6,10 @@ import {
   Patch,
   Post,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { GetCurrentUserId } from '../common/decorators/get-current-userId.decorator';
 import { GetCurrentUser } from '../common/decorators/get-current-user.decorator';
 import { RtGuard } from '../common/guards/rt.guard';
@@ -40,8 +42,25 @@ export class AuthController {
   @Public()
   @Post('signin')
   @HttpCode(HttpStatus.OK)
-  async signin(@Body() dto: SigninDto): Promise<Tokens> {
-    return await this.authService.signin(dto);
+  async signin(
+    @Body() dto: SigninDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<Tokens> {
+    const { access_token, refresh_token } = await this.authService.signin(dto);
+    res.cookie('access_token', access_token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+    });
+    res.cookie('refresh_token', refresh_token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+    });
+    return {
+      access_token,
+      refresh_token,
+    };
   }
 
   /*
