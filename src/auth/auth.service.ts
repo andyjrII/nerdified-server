@@ -135,8 +135,8 @@ export class AuthService {
           email,
         },
         {
-          secret: 'at-secret',
-          expiresIn: 60 * 15,
+          secret: process.env.AT_SECRET_KEY,
+          expiresIn: '1h',
         },
       ),
       this.jwtService.signAsync(
@@ -145,8 +145,8 @@ export class AuthService {
           email,
         },
         {
-          secret: 'rt-secret',
-          expiresIn: 60 * 60 * 24 * 7,
+          secret: process.env.RT_SECRET_KEY,
+          expiresIn: '7d',
         },
       ),
     ]);
