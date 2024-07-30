@@ -83,8 +83,27 @@ export class AuthController {
   async refresh(
     @GetCurrentUserId() id: number,
     @GetCurrentUser('refreshToken') refreshToken: string,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<Tokens> {
-    return await this.authService.refresh(id, refreshToken);
+    const { access_token, refresh_token } = await this.authService.refresh(
+      id,
+      refreshToken,
+    );
+    res.cookie('access_token', access_token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+    });
+    res.cookie('refresh_token', refresh_token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+    });
+
+    return {
+      access_token,
+      refresh_token,
+    };
   }
 
   /*
