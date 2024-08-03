@@ -6,10 +6,11 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   Res,
   UseGuards,
 } from '@nestjs/common';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { GetCurrentUserId } from '../common/decorators/get-current-userId.decorator';
 import { GetCurrentUser } from '../common/decorators/get-current-user.decorator';
 import { RtGuard } from '../common/guards/rt.guard';
@@ -47,11 +48,6 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<Tokens> {
     const { access_token, refresh_token } = await this.authService.signin(dto);
-    res.cookie('access_token', access_token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'strict',
-    });
     res.cookie('refresh_token', refresh_token, {
       httpOnly: true,
       secure: true,
@@ -73,7 +69,6 @@ export class AuthController {
     @Query('email') email: string,
     @Res({ passthrough: true }) res: Response,
   ) {
-    res.clearCookie('access_token');
     res.clearCookie('refresh_token');
     return await this.authService.signout(email);
   }
@@ -81,24 +76,19 @@ export class AuthController {
   /*
    * Refresh endpoint to get the Access Token using the Refresh Token
    */
-  @Public()
   @UseGuards(RtGuard)
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refresh(
     @GetCurrentUserId() id: number,
-    @GetCurrentUser('refreshToken') refreshToken: string,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<Tokens> {
+    const refreshToken = req.cookies['refresh_token'];
     const { access_token, refresh_token } = await this.authService.refresh(
       id,
       refreshToken,
     );
-    res.cookie('access_token', access_token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'strict',
-    });
     res.cookie('refresh_token', refresh_token, {
       httpOnly: true,
       secure: true,
@@ -125,16 +115,6 @@ export class AuthController {
   //Admin Endpoints
 
   /*
-   * Signup endpoint for Super Admin
-   */
-  @Public()
-  @Post('admin_signup')
-  @HttpCode(HttpStatus.CREATED)
-  async adminSignup(@Body() dto: AdminSignupDto): Promise<[Tokens, string]> {
-    return await this.authService.adminSignup(dto);
-  }
-
-  /*
    * Signin endpoint for Admin
    */
   @Public()
@@ -157,7 +137,6 @@ export class AuthController {
   /*
    * Refresh endpoint for Admin to get Access Token using Refresh Token
    */
-  @Public()
   @UseGuards(RtGuard)
   @Post('admin_refresh')
   @HttpCode(HttpStatus.OK)

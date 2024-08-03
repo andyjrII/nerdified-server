@@ -24,10 +24,12 @@ import { WishlistModule } from './wishlist/wishlist.module';
   ],
   providers: [
     PrismaService,
+    /*
     {
       provide: APP_GUARD,
       useClass: AtGuard,
-    },
+    }, 
+    */
   ],
 })
 export class AppModule {}

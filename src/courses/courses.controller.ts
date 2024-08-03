@@ -84,6 +84,7 @@ export class CoursesController {
     return await this.coursesService.getLatestCourses();
   }
 
+  @UseGuards(AtGuard)
   @Get('top-enrolled/4')
   async getTopEnrolledCourses(): Promise<Course[]> {
     return this.coursesService.getTopEnrolledCourses();
@@ -106,6 +107,7 @@ export class CoursesController {
   /*
    * Returns id and title of all Courses
    */
+  @UseGuards(AtGuard)
   @Get('all/titles')
   async getCourseTitlesAndIds() {
     return await this.coursesService.getCourseTitlesAndIds();
