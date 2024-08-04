@@ -21,7 +21,6 @@ import { Public } from '../common/decorators/public.decorator';
 import { Tokens } from './types/tokens.type';
 import { UpdatePasswordDto } from './dto/update-password.dto';
 import { Student } from '@prisma/client';
-import { AdminSignupDto } from './dto/admin-signup.dto';
 
 @Controller('auth')
 export class AuthController {

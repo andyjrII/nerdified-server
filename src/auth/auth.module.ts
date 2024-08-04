@@ -4,10 +4,9 @@ import { AuthController } from './auth.controller';
 import { ATStrategy } from './strategies/at.strategy';
 import { RTStrategy } from './strategies/rt.strategy';
 import { JwtModule } from '@nestjs/jwt';
-import { AdminModule } from '../admin/admin.module';
 
 @Module({
-  imports: [JwtModule.register({}), AdminModule],
+  imports: [JwtModule.register({})],
   providers: [AuthService, ATStrategy, RTStrategy],
   controllers: [AuthController],
 })

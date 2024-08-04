@@ -12,7 +12,6 @@ import { JwtService } from '@nestjs/jwt/dist';
 import { SigninDto } from './dto/signin.dto';
 import { UpdatePasswordDto } from './dto/update-password.dto';
 import { Student } from '@prisma/client';
-import { AdminSignupDto } from './dto/admin-signup.dto';
 
 @Injectable()
 export class AuthService {

@@ -35,8 +35,8 @@ export class WishlistController {
   }
 
   @UseGuards(AtGuard)
-  @Get('total/:studentId')
-  async getWishlistNumber(@Param('studentId', ParseIntPipe) studentId: number) {
-    return this.wishlistService.getWishlistNumber(studentId);
+  @Get('total/:email')
+  async getWishlistNumber(@Param('email') email: string): Promise<number> {
+    return this.wishlistService.getWishlistNumber(email);
   }
 }
