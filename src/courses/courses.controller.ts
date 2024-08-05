@@ -84,7 +84,7 @@ export class CoursesController {
     return await this.coursesService.getLatestCourses();
   }
 
-  @UseGuards(AtGuard)
+  @Public()
   @Get('top-enrolled/4')
   async getTopEnrolledCourses(): Promise<Course[]> {
     return this.coursesService.getTopEnrolledCourses();

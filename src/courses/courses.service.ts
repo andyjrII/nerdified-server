@@ -5,6 +5,7 @@ import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
 import { CourseEnrollmentSearchDto } from './dto/enrollment-search.dto';
+import { formatCurrency } from '../common/utils/formatCurrency';
 
 @Injectable()
 export class CoursesService {
@@ -66,17 +67,24 @@ export class CoursesService {
     return course.details;
   }
 
-  async getLatestCourses(): Promise<Course[]> {
+  async getLatestCourses(): Promise<any[]> {
     const courses = await this.prisma.course.findMany({
       orderBy: {
         updatedAt: 'desc',
       },
       take: 4,
     });
-    return courses;
+
+    // Format the price for each course
+    const formattedCourses = courses.map((course) => ({
+      ...course,
+      price: formatCurrency(course.price.toNumber()), // Assuming price is of type Decimal
+    }));
+
+    return formattedCourses;
   }
 
-  async getTopEnrolledCourses(): Promise<Course[]> {
+  async getTopEnrolledCourses(): Promise<any[]> {
     const topCourses = await this.prisma.courseEnrollment.groupBy({
       by: ['courseId'],
       _count: {
@@ -109,7 +117,13 @@ export class CoursesService {
       },
     });
 
-    return courses;
+    // Format the price for each course
+    const formattedCourses = courses.map((course) => ({
+      ...course,
+      price: formatCurrency(course.price.toNumber()), // Assuming price is of type Decimal
+    }));
+
+    return formattedCourses;
   }
 
   async uploadDocument(

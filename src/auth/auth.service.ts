@@ -12,15 +12,10 @@ import { JwtService } from '@nestjs/jwt/dist';
 import { SigninDto } from './dto/signin.dto';
 import { UpdatePasswordDto } from './dto/update-password.dto';
 import { Student } from '@prisma/client';
-import { StudentsService } from '../students/students.service';
 
 @Injectable()
 export class AuthService {
-  constructor(
-    private prisma: PrismaService,
-    private jwtService: JwtService,
-    private readonly studentsService: StudentsService,
-  ) {}
+  constructor(private prisma: PrismaService, private jwtService: JwtService) {}
 
   async signup(dto: SignupDto): Promise<Tokens> {
     const password = await this.hashData(dto.password);

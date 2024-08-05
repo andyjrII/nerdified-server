@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { CourseEnrollment, Student } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CourseEnrollmentDto } from './dto/course-enrollment.dto';
+import { formatCurrency } from '../common/utils/formatCurrency';
 
 @Injectable()
 export class StudentsService {
@@ -62,6 +63,27 @@ export class StudentsService {
     return await this.prisma.courseEnrollment.count({
       where: { studentId: student.id },
     });
+  }
+
+  async totalPaidByStudentEmail(email: string): Promise<string> {
+    const student = await this.prisma.student.findUnique({
+      where: { email },
+      include: {
+        courses: {
+          select: {
+            paidAmount: true,
+          },
+        },
+      },
+    });
+
+    if (!student) throw new Error('Student not found');
+
+    const totalPaidAmount = student.courses.reduce((acc, course) => {
+      return acc + course.paidAmount.toNumber();
+    }, 0);
+
+    return formatCurrency(totalPaidAmount);
   }
 
   async getIdByEmail(email: string): Promise<number> {

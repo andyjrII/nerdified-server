@@ -79,13 +79,25 @@ export class StudentsController {
   }
 
   /*
-   * Returns the total number & total costs of Courses Enrolled by a Student using email param
+   * Returns the total number of Courses Enrolled by a Student using email
    */
   @UseGuards(AtGuard)
   @Get('total/:email')
   @HttpCode(HttpStatus.OK)
   async totalEnrolled(@Param('email') email: string): Promise<Number> {
     return await this.studentsService.totalEnrolled(email);
+  }
+
+  /*
+   * Returns the total costs of Courses Enrolled by a Student using email
+   */
+  @UseGuards(AtGuard)
+  @Get('total-paid/:email')
+  @HttpCode(HttpStatus.OK)
+  async getTotalPaidByStudentEmail(
+    @Param('email') email: string,
+  ): Promise<string> {
+    return await this.studentsService.totalPaidByStudentEmail(email);
   }
 
   /*
