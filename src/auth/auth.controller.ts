@@ -36,7 +36,7 @@ export class AuthController {
     @Body() dto: SignupDto,
     @Res({ passthrough: true }) res: Response,
   ): Promise<Tokens> {
-    const { access_token, refresh_token } = await this.authService.signin(dto);
+    const { access_token, refresh_token } = await this.authService.signup(dto);
     res.cookie('refresh_token', refresh_token, {
       httpOnly: true,
       secure: true,
