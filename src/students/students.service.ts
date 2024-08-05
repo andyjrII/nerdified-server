@@ -7,7 +7,7 @@ import { CourseEnrollmentDto } from './dto/course-enrollment.dto';
 export class StudentsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findStudent(email: string): Promise<Student> {
+  async getStudent(email: string): Promise<Student | undefined> {
     const student = await this.prisma.student.findUnique({
       where: { email: email },
       include: {
@@ -19,7 +19,7 @@ export class StudentsService {
   }
 
   async courseEnrollment(dto: CourseEnrollmentDto): Promise<CourseEnrollment> {
-    const student = await this.findStudent(dto.email);
+    const student = await this.getStudent(dto.email);
     const enrollment = await this.prisma.courseEnrollment.create({
       data: {
         studentId: student.id,
@@ -36,7 +36,7 @@ export class StudentsService {
   }
 
   async coursesEnrolled(email: string): Promise<CourseEnrollment[]> {
-    const student = await this.findStudent(email);
+    const student = await this.getStudent(email);
     const enrolled = await this.prisma.courseEnrollment.findMany({
       where: {
         studentId: student.id,

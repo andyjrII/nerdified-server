@@ -32,8 +32,20 @@ export class AuthController {
   @Public()
   @Post('signup')
   @HttpCode(HttpStatus.CREATED)
-  async signup(@Body() dto: SignupDto): Promise<Tokens> {
-    return await this.authService.signup(dto);
+  async signup(
+    @Body() dto: SignupDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<Tokens> {
+    const { access_token, refresh_token } = await this.authService.signin(dto);
+    res.cookie('refresh_token', refresh_token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+    });
+    return {
+      access_token,
+      refresh_token,
+    };
   }
 
   /*

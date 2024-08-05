@@ -38,8 +38,8 @@ export class StudentsController {
   @UseGuards(AtGuard)
   @Get(':email')
   @HttpCode(HttpStatus.OK)
-  async findStudent(@Param('email') email: string): Promise<Student> {
-    return await this.studentsService.findStudent(email);
+  async getStudentByEmail(@Param('email') email: string): Promise<Student> {
+    return await this.studentsService.getStudent(email);
   }
 
   /*
