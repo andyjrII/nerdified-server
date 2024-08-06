@@ -11,6 +11,7 @@ import {
 import { WishlistService } from './wishlist.service';
 import { WishListDto } from './dto/wishlist.dto';
 import { AtGuard } from '../common/guards/at.guard';
+import { Wishlist } from '@prisma/client';
 
 @Controller('wishlist')
 export class WishlistController {
@@ -30,8 +31,14 @@ export class WishlistController {
 
   @UseGuards(AtGuard)
   @Get(':studentId')
-  async getWishlist(@Param('studentId', ParseIntPipe) studentId: number) {
-    return this.wishlistService.getWishlist(studentId);
+  async getWishlistById(@Param('studentId', ParseIntPipe) studentId: number) {
+    return this.wishlistService.getWishlistById(studentId);
+  }
+
+  @UseGuards(AtGuard)
+  @Get('email/:email')
+  async getWishlistByEmail(@Param('email') email: string): Promise<Wishlist[]> {
+    return this.wishlistService.getWishlistByEmail(email);
   }
 
   @UseGuards(AtGuard)

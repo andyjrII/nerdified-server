@@ -48,6 +48,7 @@ export class CoursesService {
       return {
         ...course,
         averageRating,
+        price: formatCurrency(course.price.toNumber()),
       };
     });
 
