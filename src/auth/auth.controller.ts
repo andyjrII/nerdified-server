@@ -85,7 +85,7 @@ export class AuthController {
   }
 
   /*
-   * Refresh endpoint to get the Access Token using the Refresh Token
+   * Refresh endpoint for Student
    */
   @UseGuards(RtGuard)
   @Post('refresh')
@@ -129,32 +129,60 @@ export class AuthController {
    * Signin endpoint for Admin
    */
   @Public()
-  @Post('admin_signin')
+  @Post('admin/signin')
   @HttpCode(HttpStatus.OK)
-  async adminSignin(@Body() dto: SigninDto): Promise<[Tokens, string]> {
-    return await this.authService.adminSignin(dto);
+  async adminSignin(
+    @Body() dto: SigninDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<[Tokens, string]> {
+    const response = await this.authService.adminSignin(dto);
+    res.cookie('refresh_token', response[0].refresh_token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+    });
+    return response;
   }
 
   /*
    * Signout endpoint for Admin
    */
   @Public()
-  @Post('admin_signout')
+  @Post('admin/signout')
   @HttpCode(HttpStatus.OK)
-  async adminSignout(@Query('email') email: string) {
+  async adminSignout(
+    @Query('email') email: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    res.clearCookie('refresh_token');
     return await this.authService.adminSignout(email);
   }
 
   /*
-   * Refresh endpoint for Admin to get Access Token using Refresh Token
+   * Refresh endpoint for Admin
    */
   @UseGuards(RtGuard)
-  @Post('admin_refresh')
+  @Post('admin/refresh')
   @HttpCode(HttpStatus.OK)
   async adminRefresh(
     @GetCurrentUserId() id: number,
-    @GetCurrentUser('refreshToken') refreshToken: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<Tokens> {
-    return await this.authService.adminRefresh(id, refreshToken);
+    const refreshToken = req.cookies['refresh_token'];
+    const { access_token, refresh_token } = await this.authService.adminRefresh(
+      id,
+      refreshToken,
+    );
+    res.cookie('refresh_token', refresh_token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+    });
+
+    return {
+      access_token,
+      refresh_token,
+    };
   }
 }

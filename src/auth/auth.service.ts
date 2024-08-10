@@ -56,7 +56,7 @@ export class AuthService {
   }
 
   async signout(email: string) {
-    await this.prisma.student.updateMany({
+    return await this.prisma.student.updateMany({
       where: {
         email,
         refreshToken: {
@@ -156,7 +156,7 @@ export class AuthService {
     };
   }
 
-  // Admin Functions
+  // Admin
 
   async adminSignin(dto: SigninDto): Promise<[Tokens, string]> {
     const admin = await this.prisma.admin.findUnique({
@@ -164,16 +164,16 @@ export class AuthService {
         email: dto.email,
       },
     });
-    if (!admin) throw new ForbiddenException('Access Denied!');
+    if (!admin) throw new UnauthorizedException('Access Denied!');
     const passwordMatches = await bcrypt.compare(dto.password, admin.password);
-    if (!passwordMatches) throw new ForbiddenException('Access Denied!');
+    if (!passwordMatches) throw new UnauthorizedException('Access Denied!');
     const tokens = await this.getTokens(admin.id, admin.email);
     await this.adminUpdateRT(admin.id, tokens.refresh_token);
     return [tokens, admin.role];
   }
 
   async adminSignout(email: string) {
-    await this.prisma.admin.updateMany({
+    return await this.prisma.admin.updateMany({
       where: {
         email,
         refreshToken: {
@@ -191,12 +191,12 @@ export class AuthService {
       where: { id },
     });
     if (!admin || !admin.refreshToken)
-      throw new ForbiddenException('Access Denied!');
+      throw new UnauthorizedException('Access Denied!');
     const refreshTokenMatches = await bcrypt.compare(
       refreshToken,
       admin.refreshToken,
     );
-    if (!refreshTokenMatches) throw new ForbiddenException('Access Denied!');
+    if (!refreshTokenMatches) throw new UnauthorizedException('Access Denied!');
     const tokens = await this.getTokens(admin.id, admin.email);
     await this.adminUpdateRT(admin.id, tokens.refresh_token);
     return tokens;
