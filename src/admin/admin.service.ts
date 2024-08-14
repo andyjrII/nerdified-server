@@ -12,6 +12,33 @@ import * as bcrypt from 'bcrypt';
 export class AdminService {
   constructor(private prisma: PrismaService) {}
 
+  async getPosts(
+    page: number,
+    search: string,
+    startDate: string,
+    endDate: string,
+  ): Promise<Object> {
+    const [posts, totalPosts] = await Promise.all([
+      await this.prisma.blog.findMany({
+        where: {
+          OR: [
+            {
+              title: { contains: search, mode: 'insensitive' },
+            },
+          ],
+          datePosted: {
+            gte: startDate ? new Date(startDate) : undefined,
+            lte: endDate ? new Date(endDate) : undefined,
+          },
+        },
+        skip: 20 * (page - 1),
+        take: 20,
+      }),
+      this.prisma.blog.count({}),
+    ]);
+    return { posts, totalPosts };
+  }
+
   async getTotal(): Promise<Number[]> {
     const totalStudents = await this.prisma.student.count({});
     const totalCourses = await this.prisma.course.count({});

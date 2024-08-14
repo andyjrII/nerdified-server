@@ -4,6 +4,7 @@ import {
   IsArray,
   IsEmail,
   IsNotEmpty,
+  IsNumber,
   IsNumberString,
   IsString,
 } from 'class-validator';
@@ -17,8 +18,8 @@ export class CourseEnrollmentDto {
   @Transform((courseId: any) => Number.parseInt(courseId))
   courseId: number;
 
-  @IsNumberString()
   @IsNotEmpty()
+  @Transform((amount: any) => Number.parseInt(amount))
   amount: number;
 
   @IsString()

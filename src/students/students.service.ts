@@ -19,11 +19,18 @@ export class StudentsService {
     return student;
   }
 
+  async getStudentId(email: string): Promise<number> {
+    const student = await this.prisma.student.findUnique({
+      where: { email },
+    });
+    return student.id;
+  }
+
   async courseEnrollment(dto: CourseEnrollmentDto): Promise<CourseEnrollment> {
-    const student = await this.getStudent(dto.email);
+    const studentId = await this.getStudentId(dto.email);
     const enrollment = await this.prisma.courseEnrollment.create({
       data: {
-        studentId: student.id,
+        studentId,
         courseId: dto.courseId,
         paidAmount: dto.amount,
         reference: dto.reference,
@@ -37,16 +44,16 @@ export class StudentsService {
   }
 
   async coursesEnrolled(email: string): Promise<CourseEnrollment[]> {
-    const student = await this.getStudent(email);
+    const id = await this.getStudentId(email);
     const enrolled = await this.prisma.courseEnrollment.findMany({
       where: {
-        studentId: student.id,
+        studentId: id,
       },
       include: {
         course: true,
       },
     });
-    if (enrolled) return enrolled;
+    return enrolled;
   }
 
   async courseAlreadyEnrolled(courseId: number): Promise<CourseEnrollment> {
@@ -156,9 +163,6 @@ export class StudentsService {
         },
         skip: 20 * (page - 1),
         take: 20,
-        orderBy: {
-          createdAt: 'desc',
-        },
       }),
       await this.prisma.student.count({}),
     ]);

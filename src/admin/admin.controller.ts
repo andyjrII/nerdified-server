@@ -12,13 +12,28 @@ import {
   Body,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
-import { Admin, ROLE } from '@prisma/client';
+import { Admin, Blog, ROLE } from '@prisma/client';
 import { AtGuard } from '../common/guards/at.guard';
 import { CreateAdminDto } from './dto/create-admin.dto';
 
 @Controller('admin')
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
+
+  /*
+   * Returns all Blog Posts using pagination, search, startDate & endDate
+   */
+  @UseGuards(AtGuard)
+  @Get('blogs/:page')
+  @HttpCode(HttpStatus.OK)
+  async getPosts(
+    @Param('page', ParseIntPipe) page: number,
+    @Query('search') search: string,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+  ): Promise<Object> {
+    return await this.adminService.getPosts(page, search, startDate, endDate);
+  }
 
   /*
    * Get total courses, students and products on the site
@@ -56,7 +71,7 @@ export class AdminController {
    * Creates SUB Admin
    */
   @UseGuards(AtGuard)
-  @Post('create_admin')
+  @Post('register')
   @HttpCode(HttpStatus.CREATED)
   async createAdmin(@Body() dto: CreateAdminDto): Promise<Admin> {
     return await this.adminService.createAdmin(dto);

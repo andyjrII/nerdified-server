@@ -3,9 +3,9 @@ import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
-const EMAIL = process.env.EMAIL;
-const PASSWORD = process.env.PASSWORD;
-const NAME = process.env.NAME;
+const EMAIL = process.env.ADMIN_EMAIL;
+const PASSWORD = process.env.ADMIN_PASSWORD;
+const NAME = process.env.ADMIN_NAME;
 
 async function createAdmin() {
   const email = EMAIL;

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   HttpCode,
@@ -12,7 +13,6 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { GetCurrentUserId } from '../common/decorators/get-current-userId.decorator';
-import { GetCurrentUser } from '../common/decorators/get-current-user.decorator';
 import { RtGuard } from '../common/guards/rt.guard';
 import { AuthService } from './auth.service';
 import { SigninDto } from './dto/signin.dto';
@@ -96,6 +96,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<Tokens> {
     const refreshToken = req.cookies['refresh_token'];
+    if (!refreshToken) throw new BadRequestException('No refresh token found');
     const { access_token, refresh_token } = await this.authService.refresh(
       id,
       refreshToken,
