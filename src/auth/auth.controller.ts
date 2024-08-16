@@ -41,6 +41,7 @@ export class AuthController {
       httpOnly: true,
       secure: true,
       sameSite: 'strict',
+      maxAge: 3 * 24 * 60 * 60 * 1000, // 3 days in milliseconds
     });
     return {
       access_token,
@@ -63,6 +64,7 @@ export class AuthController {
       httpOnly: true,
       secure: true,
       sameSite: 'strict',
+      maxAge: 3 * 24 * 60 * 60 * 1000, // 3 days in milliseconds
     });
     return {
       access_token,
@@ -105,6 +107,7 @@ export class AuthController {
       httpOnly: true,
       secure: true,
       sameSite: 'strict',
+      maxAge: 3 * 24 * 60 * 60 * 1000, // 3 days in milliseconds
     });
 
     return {
