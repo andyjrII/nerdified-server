@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -12,18 +11,34 @@ import { JwtService } from '@nestjs/jwt/dist';
 import { SigninDto } from './dto/signin.dto';
 import { UpdatePasswordDto } from './dto/update-password.dto';
 import { Student } from '@prisma/client';
+import { v2 as cloudinary } from 'cloudinary';
+import { StudentsService } from '../students/students.service';
 
 @Injectable()
 export class AuthService {
-  constructor(private prisma: PrismaService, private jwtService: JwtService) {}
+  constructor(
+    private prisma: PrismaService,
+    private jwtService: JwtService,
+    private studentsService: StudentsService,
+  ) {}
 
-  async signup(dto: SignupDto): Promise<Tokens> {
-    const password = await this.hashData(dto.password);
+  async signup(dto: SignupDto, image: Express.Multer.File): Promise<Tokens> {
     // check if student with the email already exists
     const student = await this.prisma.student.findUnique({
       where: { email: dto.email },
     });
     if (student) throw new BadRequestException('Student already exists!');
+
+    // Upload the image to Cloudinary
+    const uploadedImage = await this.studentsService.uploadImageToCloudinary(
+      image,
+    );
+    if (!uploadedImage || !uploadedImage.secure_url) {
+      throw new BadRequestException('Image upload failed');
+    }
+
+    // Store user details in the database
+    const password = await this.hashData(dto.password);
     const newStudent = await this.prisma.student.create({
       data: {
         email: dto.email,
@@ -31,6 +46,7 @@ export class AuthService {
         phoneNumber: dto.phoneNumber,
         name: dto.name,
         address: dto.address,
+        imagePath: uploadedImage.secure_url,
       },
     });
     const tokens = await this.getTokens(newStudent.id, newStudent.email);
@@ -156,7 +172,7 @@ export class AuthService {
     };
   }
 
-  // Admin
+  // Admin Functions
 
   async adminSignin(dto: SigninDto): Promise<[Tokens, string]> {
     const admin = await this.prisma.admin.findUnique({

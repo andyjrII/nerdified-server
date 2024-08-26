@@ -10,8 +10,11 @@ import {
   Req,
   Res,
   UseGuards,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { GetCurrentUserId } from '../common/decorators/get-current-userId.decorator';
 import { RtGuard } from '../common/guards/rt.guard';
 import { AuthService } from './auth.service';
@@ -31,12 +34,20 @@ export class AuthController {
    */
   @Public()
   @Post('signup')
+  @UseInterceptors(FileInterceptor('image'))
   @HttpCode(HttpStatus.CREATED)
   async signup(
     @Body() dto: SignupDto,
+    @UploadedFile() image: Express.Multer.File,
     @Res({ passthrough: true }) res: Response,
   ): Promise<Tokens> {
-    const { access_token, refresh_token } = await this.authService.signup(dto);
+    if (!image) {
+      throw new BadRequestException('Image is required');
+    }
+    const { access_token, refresh_token } = await this.authService.signup(
+      dto,
+      image,
+    );
     res.cookie('refresh_token', refresh_token, {
       httpOnly: true,
       secure: true,
@@ -126,8 +137,6 @@ export class AuthController {
   ): Promise<Student | undefined> {
     return await this.authService.changePassword(dto);
   }
-
-  //Admin Endpoints
 
   /*
    * Signin endpoint for Admin

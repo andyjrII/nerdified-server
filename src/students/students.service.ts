@@ -3,6 +3,8 @@ import { CourseEnrollment, Student } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CourseEnrollmentDto } from './dto/course-enrollment.dto';
 import { formatCurrency } from '../common/utils/formatCurrency';
+import { UploadApiResponse } from 'cloudinary';
+import { v2 as cloudinary } from 'cloudinary';
 
 @Injectable()
 export class StudentsService {
@@ -10,7 +12,7 @@ export class StudentsService {
 
   async getStudent(email: string): Promise<Student | undefined> {
     const student = await this.prisma.student.findUnique({
-      where: { email: email },
+      where: { email },
       include: {
         wishlist: true,
       },
@@ -172,6 +174,16 @@ export class StudentsService {
   async deleteStudent(id: number): Promise<Student | undefined> {
     return await this.prisma.student.delete({
       where: { id },
+    });
+  }
+
+  async uploadImageToCloudinary(
+    file: Express.Multer.File,
+  ): Promise<UploadApiResponse> {
+    return await cloudinary.uploader.upload(file.path, {
+      folder: 'nerdified/students',
+      public_id: file.filename,
+      resource_type: 'image',
     });
   }
 }
