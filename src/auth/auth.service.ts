@@ -11,7 +11,6 @@ import { JwtService } from '@nestjs/jwt/dist';
 import { SigninDto } from './dto/signin.dto';
 import { UpdatePasswordDto } from './dto/update-password.dto';
 import { Student } from '@prisma/client';
-import { v2 as cloudinary } from 'cloudinary';
 import { StudentsService } from '../students/students.service';
 
 @Injectable()

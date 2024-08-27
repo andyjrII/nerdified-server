@@ -4,7 +4,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CourseEnrollmentDto } from './dto/course-enrollment.dto';
 import { formatCurrency } from '../common/utils/formatCurrency';
 import { UploadApiResponse } from 'cloudinary';
-import { v2 as cloudinary } from 'cloudinary';
+import { cloudinary } from '../cloudinary/cloudinary.provider';
+import { Readable } from 'stream';
 
 @Injectable()
 export class StudentsService {
@@ -180,10 +181,26 @@ export class StudentsService {
   async uploadImageToCloudinary(
     file: Express.Multer.File,
   ): Promise<UploadApiResponse> {
-    return await cloudinary.uploader.upload(file.path, {
-      folder: 'nerdified/students',
-      public_id: file.filename,
-      resource_type: 'image',
+    return new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: 'nerdified/students',
+          public_id: file.originalname,
+          resource_type: 'image',
+        },
+        (error, result) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve(result);
+          }
+        },
+      );
+
+      const bufferStream = new Readable();
+      bufferStream.push(file.buffer);
+      bufferStream.push(null);
+      bufferStream.pipe(uploadStream);
     });
   }
 }

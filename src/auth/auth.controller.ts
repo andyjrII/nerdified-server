@@ -41,6 +41,7 @@ export class AuthController {
     @UploadedFile() image: Express.Multer.File,
     @Res({ passthrough: true }) res: Response,
   ): Promise<Tokens> {
+    console.log(image);
     if (!image) {
       throw new BadRequestException('Image is required');
     }
