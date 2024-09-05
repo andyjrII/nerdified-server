@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CourseEnrollment, Student } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CourseEnrollmentDto } from './dto/course-enrollment.dto';
@@ -105,13 +109,32 @@ export class StudentsService {
 
   async uploadImage(
     id: number,
-    imagePath: string,
-  ): Promise<Student | undefined> {
-    const student = await this.prisma.student.update({
+    newImage: Express.Multer.File,
+  ): Promise<string> {
+    const student = await this.prisma.student.findUnique({
       where: { id },
-      data: { imagePath },
+      select: { imagePath: true },
     });
-    return student;
+
+    // Extract the public ID of the old image from its URL
+    if (student?.imagePath) {
+      const publicId = this.extractPublicIdFromUrl(student.imagePath);
+      await this.deleteFileFromCloudinary(publicId); // Delete the old image
+    }
+
+    // Upload the new image to Cloudinary
+    const uploadResult = await this.uploadImageToCloudinary(newImage);
+    if (!uploadResult || !uploadResult.secure_url) {
+      throw new BadRequestException('Image upload failed');
+    }
+
+    // Update the student's record with the new image URL
+    await this.prisma.student.update({
+      where: { id },
+      data: { imagePath: uploadResult.secure_url },
+    });
+
+    return uploadResult.secure_url;
   }
 
   async getImage(email: string): Promise<string> {
@@ -178,6 +201,10 @@ export class StudentsService {
     });
   }
 
+  /*
+   * Cloudinary Functions
+   */
+
   async uploadImageToCloudinary(
     file: Express.Multer.File,
   ): Promise<UploadApiResponse> {
@@ -202,5 +229,34 @@ export class StudentsService {
       bufferStream.push(null);
       bufferStream.pipe(uploadStream);
     });
+  }
+
+  async deleteFileFromCloudinary(publicId: string): Promise<void> {
+    try {
+      const fullPublicId = `nerdified/students/${publicId}`; // Ensure correct full publicId
+      const result = await cloudinary.uploader.destroy(fullPublicId, {
+        resource_type: 'image',
+      });
+
+      if (result.result !== 'ok') {
+        throw new Error(
+          `Failed to delete image with publicId: ${fullPublicId}, reason: ${result.result}`,
+        );
+      }
+    } catch (error) {
+      throw new Error(`Unable to delete image from Cloudinary`);
+    }
+  }
+
+  private extractPublicIdFromUrl(url: string): string {
+    // Assuming the URL has the format:
+    // "https://res.cloudinary.com/{cloud_name}/image/upload/v1234567890/folder_name/public_id.extension"
+    const segments = url.split('/');
+    const fileName = segments.pop(); // file name with extension
+
+    // Remove the extension from the file name if multiple extensions are present
+    const fileNameWithoutExtension = fileName.split('.').slice(0, -1).join('.');
+
+    return fileNameWithoutExtension;
   }
 }

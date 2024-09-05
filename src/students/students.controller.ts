@@ -105,22 +105,18 @@ export class StudentsController {
    */
   @UseGuards(AtGuard)
   @Patch('upload/:email')
-  @UseInterceptors(FileInterceptor('image', saveImageToStorage))
+  @UseInterceptors(FileInterceptor('image'))
   @HttpCode(HttpStatus.OK)
   async uploadImage(
     @UploadedFile() image: Express.Multer.File,
     @Param('email') email: string,
-  ) {
-    const id = await this.studentsService.getIdByEmail(email);
-    const imageName = image?.filename;
-    if (!imageName) throw new BadRequestException('Invalid image format!');
-    const prevImage = await this.studentsService.getImageById(id);
-    if (prevImage) {
-      const imagesFolderPath = join(process.cwd(), 'images');
-      const fullImagePath = join(imagesFolderPath + '/' + prevImage);
-      removeImage(fullImagePath);
+  ): Promise<string> {
+    if (!image) {
+      throw new BadRequestException('Image is required');
     }
-    return await this.studentsService.uploadImage(id, imageName);
+    const id = await this.studentsService.getIdByEmail(email);
+    const imagePath = await this.studentsService.uploadImage(id, image);
+    return imagePath;
   }
 
   /*
