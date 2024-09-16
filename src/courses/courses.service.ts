@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Course, CourseEnrollment } from '@prisma/client';
 import { CreateCourseDto } from './dto/create-course.dto';
@@ -6,6 +10,9 @@ import { UpdateCourseDto } from './dto/update-course.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
 import { CourseEnrollmentSearchDto } from './dto/enrollment-search.dto';
 import { formatCurrency } from '../common/utils/formatCurrency';
+import { cloudinary } from '../cloudinary/cloudinary.provider';
+import { UploadApiResponse } from 'cloudinary';
+import { Readable } from 'stream';
 
 @Injectable()
 export class CoursesService {
@@ -138,17 +145,26 @@ export class CoursesService {
     return course;
   }
 
-  async createCourse(dto: CreateCourseDto): Promise<Course | undefined> {
+  async createCourse(
+    dto: CreateCourseDto,
+    pdf: Express.Multer.File,
+  ): Promise<Course | undefined> {
     const courseExist = await this.prisma.course.findUnique({
       where: { title: dto.title },
     });
     if (courseExist)
-      throw new BadRequestException('Course with title already exists!');
+      throw new ConflictException('Course with title already exists!');
+
+    // Upload the PDF to Cloudinary
+    const pdfUploadResult = await this.uploadFileToCloudinary(pdf);
+    if (!pdfUploadResult || !pdfUploadResult.secure_url)
+      throw new BadRequestException('PDF upload failed');
 
     const course = await this.prisma.course.create({
       data: {
         title: dto.title,
         price: dto.price,
+        details: pdfUploadResult.secure_url,
       },
     });
     if (course) return course;
@@ -256,5 +272,64 @@ export class CoursesService {
         course: true,
       },
     });
+  }
+
+  /*
+   * Cloudinary Functions
+   */
+
+  async uploadFileToCloudinary(
+    file: Express.Multer.File,
+  ): Promise<UploadApiResponse> {
+    return new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: 'nerdified/courses',
+          public_id: file.originalname,
+          resource_type: 'raw',
+        },
+        (error, result) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve(result);
+          }
+        },
+      );
+
+      const bufferStream = new Readable();
+      bufferStream.push(file.buffer);
+      bufferStream.push(null);
+      bufferStream.pipe(uploadStream);
+    });
+  }
+
+  async deleteFileFromCloudinary(publicId: string): Promise<void> {
+    try {
+      const fullPublicId = `nerdified/students/${publicId}`; // Ensure correct full publicId
+      const result = await cloudinary.uploader.destroy(fullPublicId, {
+        resource_type: 'raw',
+      });
+
+      if (result.result !== 'ok') {
+        throw new Error(
+          `Failed to delete image with publicId: ${fullPublicId}, reason: ${result.result}`,
+        );
+      }
+    } catch (error) {
+      throw new Error(`Unable to delete image from Cloudinary`);
+    }
+  }
+
+  private extractPublicIdFromUrl(url: string): string {
+    // Assuming the URL has the format:
+    // "https://res.cloudinary.com/{cloud_name}/image/upload/v1234567890/folder_name/public_id.extension"
+    const segments = url.split('/');
+    const fileName = segments.pop(); // file name with extension
+
+    // Remove the extension from the file name if multiple extensions are present
+    const fileNameWithoutExtension = fileName.split('.').slice(0, -1).join('.');
+
+    return fileNameWithoutExtension;
   }
 }

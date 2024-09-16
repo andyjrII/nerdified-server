@@ -9,7 +9,6 @@ import {
   Patch,
   Get,
   Post,
-  Res,
   UseInterceptors,
   UploadedFile,
   BadRequestException,
@@ -22,10 +21,7 @@ import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { FileInterceptor } from '@nestjs/platform-express';
-import {
-  removeDocument,
-  saveDocumentToStorage,
-} from '../common/helpers/document.storage';
+import { removeDocument } from '../common/helpers/document.storage';
 import { join } from 'path';
 import { AtGuard } from '../common/guards/at.guard';
 import { UpdateStatusDto } from './dto/update-status.dto';
@@ -66,12 +62,8 @@ export class CoursesController {
   @HttpCode(HttpStatus.OK)
   async getCourseDetails(
     @Param('id', ParseIntPipe) id: number,
-    @Res() res,
   ): Promise<string> {
-    const outlinePath = await this.coursesService.getDetails(id);
-    if (outlinePath) {
-      return res.sendFile(outlinePath, { root: './documents' });
-    }
+    return await this.coursesService.getDetails(id);
   }
 
   /*
@@ -97,11 +89,14 @@ export class CoursesController {
    */
   @UseGuards(AtGuard)
   @Post('create')
+  @UseInterceptors(FileInterceptor('pdf'))
   @HttpCode(HttpStatus.CREATED)
   async createCourse(
     @Body() dto: CreateCourseDto,
+    @UploadedFile() pdf: Express.Multer.File,
   ): Promise<Course | undefined> {
-    return await this.coursesService.createCourse(dto);
+    if (!pdf) throw new BadRequestException('PDF is required');
+    return await this.coursesService.createCourse(dto, pdf);
   }
 
   /*
@@ -142,28 +137,6 @@ export class CoursesController {
       removeDocument(fullDocumentPath);
     }
     return await this.coursesService.deleteCourse(id);
-  }
-
-  /*
-   * Adds outline to a Course & deletes the previous outline from the file system by id
-   */
-  @UseGuards(AtGuard)
-  @Patch('upload/:id')
-  @UseInterceptors(FileInterceptor('file', saveDocumentToStorage))
-  @HttpCode(HttpStatus.OK)
-  async uploadDocument(
-    @UploadedFile() file: Express.Multer.File,
-    @Param('id', ParseIntPipe) id: number,
-  ) {
-    const documentName = file?.filename;
-    if (!documentName) throw new BadRequestException('Invalid image format!');
-    const prevDocument = await this.coursesService.getDetails(id);
-    if (prevDocument) {
-      const documentFolderPath = join(process.cwd(), 'images');
-      const fullDocumentPath = join(documentFolderPath + '/' + prevDocument);
-      removeDocument(fullDocumentPath);
-    }
-    return await this.coursesService.uploadDocument(id, documentName);
   }
 
   /*
