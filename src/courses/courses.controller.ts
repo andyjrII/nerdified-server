@@ -113,12 +113,15 @@ export class CoursesController {
    */
   @UseGuards(AtGuard)
   @Patch('update/:id')
+  @UseInterceptors(FileInterceptor('pdf'))
   @HttpCode(HttpStatus.OK)
   async updateCourse(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateCourseDto,
+    @UploadedFile() pdf: Express.Multer.File,
   ): Promise<Course | undefined> {
-    return await this.coursesService.updateCourse(id, dto);
+    if (!pdf) pdf = undefined;
+    return await this.coursesService.updateCourse(id, dto, pdf);
   }
 
   /*

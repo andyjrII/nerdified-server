@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Course, CourseEnrollment } from '@prisma/client';
@@ -184,24 +185,51 @@ export class CoursesService {
     return courses;
   }
 
+  /*
+   * Updates a course
+   */
   async updateCourse(
     id: number,
     dto: UpdateCourseDto,
+    pdf: Express.Multer.File,
   ): Promise<Course | undefined> {
+    let pdfUploadResult: UploadApiResponse;
+
+    // check if course exists
     const courseExist = await this.prisma.course.findUnique({
-      where: { id, title: dto.title },
-    });
-    if (courseExist) dto.title = undefined;
-
-    const course = await this.prisma.course.update({
       where: { id },
-      data: {
-        price: dto.price || undefined,
-        title: dto.title || undefined,
-      },
+    });
+    if (!courseExist) throw new NotFoundException('Course not found');
+
+    // If a new PDF is provided, delete the old one and upload the new one
+    if (pdf) {
+      if (courseExist.details) {
+        // Extract the public ID of the old PDF from its URL
+        const publicId = this.extractPublicIdFromUrl(courseExist.details);
+        await this.deleteFileFromCloudinary(publicId); // Delete the old PDF
+      }
+
+      // Upload the new PDF to Cloudinary
+      pdfUploadResult = await this.uploadFileToCloudinary(pdf);
+      if (!pdfUploadResult || !pdfUploadResult.secure_url) {
+        throw new BadRequestException('PDF upload failed');
+      }
+    }
+
+    // Only update fields that are present in the DTO or uploaded
+    const updatedCourseData = {
+      price: dto.price || undefined, // Only update if price is sent
+      title: dto.title || undefined, // Only update if title is sent
+      details: pdfUploadResult?.secure_url || courseExist.details, // Update if a new PDF is uploaded
+    };
+
+    // Update the course with the new data
+    const updatedCourse = await this.prisma.course.update({
+      where: { id },
+      data: updatedCourseData,
     });
 
-    if (course) return course;
+    if (updatedCourse) return updatedCourse;
     return undefined;
   }
 
@@ -306,18 +334,19 @@ export class CoursesService {
 
   async deleteFileFromCloudinary(publicId: string): Promise<void> {
     try {
-      const fullPublicId = `nerdified/students/${publicId}`; // Ensure correct full publicId
+      const fullPublicId = `nerdified/courses/${publicId}`;
+
       const result = await cloudinary.uploader.destroy(fullPublicId, {
-        resource_type: 'raw',
+        resource_type: 'raw', // Ensure 'raw' resource type for PDFs
       });
 
       if (result.result !== 'ok') {
         throw new Error(
-          `Failed to delete image with publicId: ${fullPublicId}, reason: ${result.result}`,
+          `Failed to delete pdf with publicId: ${fullPublicId}, reason: ${result.result}`,
         );
       }
     } catch (error) {
-      throw new Error(`Unable to delete image from Cloudinary`);
+      throw new Error(`Unable to delete pdf from Cloudinary`);
     }
   }
 
@@ -327,9 +356,6 @@ export class CoursesService {
     const segments = url.split('/');
     const fileName = segments.pop(); // file name with extension
 
-    // Remove the extension from the file name if multiple extensions are present
-    const fileNameWithoutExtension = fileName.split('.').slice(0, -1).join('.');
-
-    return fileNameWithoutExtension;
+    return fileName;
   }
 }
