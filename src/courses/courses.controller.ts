@@ -21,8 +21,6 @@ import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { removeDocument } from '../common/helpers/document.storage';
-import { join } from 'path';
 import { AtGuard } from '../common/guards/at.guard';
 import { UpdateStatusDto } from './dto/update-status.dto';
 import { CourseEnrollmentSearchDto } from './dto/enrollment-search.dto';
@@ -125,7 +123,7 @@ export class CoursesController {
   }
 
   /*
-   * Deletes a Course & its outline by id
+   * Deletes a Course
    */
   @UseGuards(AtGuard)
   @Delete(':id')
@@ -133,12 +131,6 @@ export class CoursesController {
   async deleteCourse(
     @Param('id', ParseIntPipe) id: number,
   ): Promise<Course | undefined> {
-    const documentPath = await this.coursesService.getDetails(id);
-    if (documentPath) {
-      const documentFolderPath = join(process.cwd(), 'documents');
-      const fullDocumentPath = join(documentFolderPath + '/' + documentPath);
-      removeDocument(fullDocumentPath);
-    }
     return await this.coursesService.deleteCourse(id);
   }
 

@@ -135,17 +135,6 @@ export class CoursesService {
     return formattedCourses;
   }
 
-  async uploadDocument(
-    id: number,
-    documentPath: string,
-  ): Promise<Course | undefined> {
-    const course = await this.prisma.course.update({
-      where: { id },
-      data: { details: documentPath },
-    });
-    return course;
-  }
-
   async createCourse(
     dto: CreateCourseDto,
     pdf: Express.Multer.File,
@@ -234,6 +223,12 @@ export class CoursesService {
   }
 
   async deleteCourse(id: number): Promise<Course | undefined> {
+    const course = await this.prisma.course.findUnique({ where: { id } });
+    if (course.details) {
+      // Extract the public ID of the PDF from its URL & delete the pdf file
+      const publicId = this.extractPublicIdFromUrl(course.details);
+      await this.deleteFileFromCloudinary(publicId);
+    }
     return await this.prisma.course.delete({
       where: { id },
     });
@@ -351,8 +346,6 @@ export class CoursesService {
   }
 
   private extractPublicIdFromUrl(url: string): string {
-    // Assuming the URL has the format:
-    // "https://res.cloudinary.com/{cloud_name}/image/upload/v1234567890/folder_name/public_id.extension"
     const segments = url.split('/');
     const fileName = segments.pop(); // file name with extension
 
