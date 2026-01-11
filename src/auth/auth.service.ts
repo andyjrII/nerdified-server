@@ -10,8 +10,10 @@ import { Tokens } from './types/tokens.type';
 import { JwtService } from '@nestjs/jwt/dist';
 import { SigninDto } from './dto/signin.dto';
 import { UpdatePasswordDto } from './dto/update-password.dto';
-import { Student } from '@prisma/client';
+import { Student, Tutor } from '@prisma/client';
 import { StudentsService } from '../students/students.service';
+import { TutorsService } from '../tutors/tutors.service';
+import { TutorSignupDto } from './dto/tutor-signup.dto';
 
 @Injectable()
 export class AuthService {
@@ -19,6 +21,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private studentsService: StudentsService,
+    private tutorsService: TutorsService,
   ) {}
 
   async signup(dto: SignupDto, image: Express.Multer.File): Promise<Tokens> {
@@ -220,6 +223,106 @@ export class AuthService {
   async adminUpdateRT(userId: number, rt: string) {
     const refreshToken = await this.hashData(rt);
     await this.prisma.admin.update({
+      where: {
+        id: userId,
+      },
+      data: {
+        refreshToken,
+      },
+    });
+  }
+
+  // Tutor Functions
+
+  async tutorSignup(
+    dto: TutorSignupDto,
+    image?: Express.Multer.File,
+  ): Promise<Tokens> {
+    // Check if tutor with the email already exists
+    const tutor = await this.prisma.tutor.findUnique({
+      where: { email: dto.email },
+    });
+    if (tutor) throw new BadRequestException('Tutor already exists!');
+
+    // Upload the image to Cloudinary if provided
+    let imagePath: string | undefined;
+    if (image) {
+      const uploadedImage = await this.tutorsService.uploadImageToCloudinary(
+        image,
+      );
+      if (!uploadedImage || !uploadedImage.secure_url) {
+        throw new BadRequestException('Image upload failed');
+      }
+      imagePath = uploadedImage.secure_url;
+    }
+
+    // Store tutor details in the database
+    const password = await this.hashData(dto.password);
+    const newTutor = await this.prisma.tutor.create({
+      data: {
+        email: dto.email,
+        password,
+        phoneNumber: dto.phoneNumber,
+        name: dto.name,
+        bio: dto.bio,
+        qualifications: dto.qualifications,
+        imagePath,
+        timeZone: dto.timeZone || 'UTC',
+        approved: false, // Tutors need admin approval
+      },
+    });
+    const tokens = await this.getTokens(newTutor.id, newTutor.email);
+    await this.tutorUpdateRT(newTutor.id, tokens.refresh_token);
+    return tokens;
+  }
+
+  async tutorSignin(dto: SigninDto): Promise<[Tokens, boolean]> {
+    const tutor = await this.prisma.tutor.findUnique({
+      where: {
+        email: dto.email,
+      },
+    });
+    if (!tutor) throw new UnauthorizedException('Access Denied!');
+    const passwordMatches = await bcrypt.compare(dto.password, tutor.password);
+    if (!passwordMatches) throw new UnauthorizedException('Access Denied!');
+    const tokens = await this.getTokens(tutor.id, tutor.email);
+    await this.tutorUpdateRT(tutor.id, tokens.refresh_token);
+    return [tokens, tutor.approved];
+  }
+
+  async tutorSignout(email: string) {
+    return await this.prisma.tutor.updateMany({
+      where: {
+        email,
+        refreshToken: {
+          not: null,
+        },
+      },
+      data: {
+        refreshToken: null,
+      },
+    });
+  }
+
+  async tutorRefresh(id: number, refreshToken: string): Promise<Tokens> {
+    const tutor = await this.prisma.tutor.findUnique({
+      where: { id },
+    });
+    if (!tutor || !tutor.refreshToken)
+      throw new UnauthorizedException('Access Denied!');
+    const refreshTokenMatches = await bcrypt.compare(
+      refreshToken,
+      tutor.refreshToken,
+    );
+    if (!refreshTokenMatches) throw new UnauthorizedException('Access Denied!');
+    const tokens = await this.getTokens(tutor.id, tutor.email);
+    await this.tutorUpdateRT(tutor.id, tokens.refresh_token);
+    return tokens;
+  }
+
+  async tutorUpdateRT(userId: number, rt: string) {
+    const refreshToken = await this.hashData(rt);
+    await this.prisma.tutor.update({
       where: {
         id: userId,
       },

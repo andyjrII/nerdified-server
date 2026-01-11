@@ -9,8 +9,6 @@ import {
   Patch,
   Get,
   Post,
-  UseInterceptors,
-  UploadedFile,
   BadRequestException,
   Query,
   UseGuards,
@@ -20,8 +18,8 @@ import { Course, CourseEnrollment } from '@prisma/client';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
 import { Public } from '../common/decorators/public.decorator';
-import { FileInterceptor } from '@nestjs/platform-express';
 import { AtGuard } from '../common/guards/at.guard';
+import { GetCurrentUserId } from '../common/decorators/get-current-userId.decorator';
 import { UpdateStatusDto } from './dto/update-status.dto';
 import { CourseEnrollmentSearchDto } from './dto/enrollment-search.dto';
 
@@ -83,18 +81,19 @@ export class CoursesController {
   // Admin endpoints
 
   /*
-   * Creates a new Courses
+   * Creates a new Course (for Tutors - requires tutorId in body or from auth)
+   * Note: This endpoint should be moved to a tutor-specific route in production
    */
   @UseGuards(AtGuard)
   @Post('create')
-  @UseInterceptors(FileInterceptor('pdf'))
   @HttpCode(HttpStatus.CREATED)
   async createCourse(
-    @Body() dto: CreateCourseDto,
-    @UploadedFile() pdf: Express.Multer.File,
+    @Body() dto: CreateCourseDto & { tutorId?: number },
+    @GetCurrentUserId() userId: number,
   ): Promise<Course | undefined> {
-    if (!pdf) throw new BadRequestException('PDF is required');
-    return await this.coursesService.createCourse(dto, pdf);
+    // Use tutorId from body if provided, otherwise from auth (assuming it's a tutor)
+    const tutorId = dto.tutorId || userId;
+    return await this.coursesService.createCourse(dto, tutorId);
   }
 
   /*
@@ -111,15 +110,12 @@ export class CoursesController {
    */
   @UseGuards(AtGuard)
   @Patch('update/:id')
-  @UseInterceptors(FileInterceptor('pdf'))
   @HttpCode(HttpStatus.OK)
   async updateCourse(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateCourseDto,
-    @UploadedFile() pdf: Express.Multer.File,
   ): Promise<Course | undefined> {
-    if (!pdf) pdf = undefined;
-    return await this.coursesService.updateCourse(id, dto, pdf);
+    return await this.coursesService.updateCourse(id, dto);
   }
 
   /*

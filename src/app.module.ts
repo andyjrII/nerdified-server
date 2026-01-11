@@ -8,6 +8,9 @@ import { BlogModule } from './blog/blog.module';
 import { AdminModule } from './admin/admin.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { WishlistModule } from './wishlist/wishlist.module';
+import { TutorsModule } from './tutors/tutors.module';
+import { SessionsModule } from './sessions/sessions.module';
+import { MessagesModule } from './messages/messages.module';
 
 @Module({
   imports: [
@@ -17,6 +20,9 @@ import { WishlistModule } from './wishlist/wishlist.module';
     CoursesModule,
     PrismaModule,
     StudentsModule,
+    TutorsModule,
+    SessionsModule,
+    MessagesModule,
     ReviewsModule,
     WishlistModule,
   ],

@@ -24,21 +24,63 @@ model Student {
   courses      CourseEnrollment[]
   review       Review[]
   wishlist     Wishlist[]
+  messagesSent DirectMessage[]    @relation("SenderMessages")
+  messagesReceived DirectMessage[] @relation("ReceiverMessages")
+  sessionBookings SessionBooking[]
+  sessionAttendance SessionAttendance[]
+  notifications Notification[]
 
   @@map("students")
 }
 
-model Course {
-  id          Int                @id @default(autoincrement())
-  title       String             @unique
-  price       Decimal            @default(0) @db.Decimal(10, 2)
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
-  enrollments CourseEnrollment[]
-  details     String?
-  review      Review[]
-  wishlist    Wishlist[]
+model Tutor {
+  id                Int                  @id @default(autoincrement())
+  name              String?
+  email              String               @unique
+  phoneNumber        String?              @unique
+  password           String
+  refreshToken       String?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  imagePath          String?
+  bio                String?
+  qualifications     String?
+  approved           Boolean              @default(false)
+  approvedAt         DateTime?
+  approvedBy         Admin?               @relation(fields: [approvedById], references: [id])
+  approvedById       Int?
+  courses            Course[]
+  availability       TutorAvailability[]
+  sessions           Session[]
+  messagesSent       DirectMessage[]      @relation("TutorSentMessages")
+  messagesReceived   DirectMessage[]      @relation("TutorReceivedMessages")
+  payouts            TutorPayout[]
+  timeZone           String               @default("UTC")
 
+  @@map("tutors")
+}
+
+model Course {
+  id              Int                @id @default(autoincrement())
+  title           String
+  description     String?
+  price           Decimal            @default(0) @db.Decimal(10, 2)
+  pricingModel    PRICINGMODEL       @default(PER_COURSE)
+  courseType      COURSETYPE         @default(ONE_ON_ONE)
+  maxStudents     Int?               // For group classes, null means one-on-one
+  curriculum      String?            // JSON or text
+  outcomes        String?            // Learning outcomes
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  tutor           Tutor              @relation(fields: [tutorId], references: [id])
+  tutorId         Int
+  enrollments     CourseEnrollment[]
+  review          Review[]
+  wishlist        Wishlist[]
+  sessions        Session[]
+  chatMessages    CourseChatMessage[]
+
+  @@unique([tutorId, title])
   @@map("courses")
 }
 
@@ -52,12 +94,137 @@ model CourseEnrollment {
   paidAmount      Decimal          @db.Decimal(10, 2)
   status          ENROLLMENTSTATUS @default(PENDING)
   reference       String
-  classDays       CLASSDAY[]
-  sessionsPerWeek Int              @default(1) // Assuming minimum of 1 session per week
-  preferredTime   TIMEOFDAY        @default(MORNING)
-  mode            MODE             @default(ONLINE)
+  completedAt     DateTime?
+  certificateUrl  String?
 
   @@map("courseenrolment")
+}
+
+model TutorAvailability {
+  id          Int       @id @default(autoincrement())
+  tutor       Tutor     @relation(fields: [tutorId], references: [id])
+  tutorId     Int
+  dayOfWeek   DAYOFWEEK
+  startTime   String    // Format: "HH:mm" (e.g., "09:00")
+  endTime     String    // Format: "HH:mm" (e.g., "17:00")
+  isAvailable Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("tutor_availability")
+}
+
+model Session {
+  id              Int              @id @default(autoincrement())
+  course          Course           @relation(fields: [courseId], references: [id])
+  courseId        Int
+  tutor           Tutor            @relation(fields: [tutorId], references: [id])
+  tutorId         Int
+  title           String?
+  description     String?
+  startTime       DateTime
+  endTime         DateTime
+  status          SESSIONSTATUS    @default(SCHEDULED)
+  meetingUrl      String?          // Video meeting URL (Agora/LiveKit room)
+  recordingUrl    String?          // Session recording URL
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  bookings        SessionBooking[]
+  attendance      SessionAttendance[]
+
+  @@map("sessions")
+}
+
+model SessionBooking {
+  id              Int              @id @default(autoincrement())
+  session         Session          @relation(fields: [sessionId], references: [id])
+  sessionId       Int
+  student         Student          @relation(fields: [studentId], references: [id])
+  studentId       Int
+  status          BOOKINGSTATUS    @default(CONFIRMED)
+  bookedAt        DateTime         @default(now())
+  cancelledAt     DateTime?
+
+  @@unique([sessionId, studentId])
+  @@map("session_bookings")
+}
+
+model SessionAttendance {
+  id              Int              @id @default(autoincrement())
+  session         Session          @relation(fields: [sessionId], references: [id])
+  sessionId       Int
+  student         Student          @relation(fields: [studentId], references: [id])
+  studentId       Int
+  attended        Boolean          @default(false)
+  joinedAt        DateTime?
+  leftAt          DateTime?
+  createdAt       DateTime         @default(now())
+
+  @@unique([sessionId, studentId])
+  @@map("session_attendance")
+}
+
+model DirectMessage {
+  id              Int              @id @default(autoincrement())
+  senderType      SENDERTYPE
+  studentSender   Student?         @relation("SenderMessages", fields: [studentSenderId], references: [id])
+  studentSenderId Int?
+  tutorSender     Tutor?           @relation("TutorSentMessages", fields: [tutorSenderId], references: [id])
+  tutorSenderId   Int?
+  studentReceiver Student?         @relation("ReceiverMessages", fields: [studentReceiverId], references: [id])
+  studentReceiverId Int?
+  tutorReceiver   Tutor?           @relation("TutorReceivedMessages", fields: [tutorReceiverId], references: [id])
+  tutorReceiverId Int?
+  message         String
+  read            Boolean          @default(false)
+  readAt          DateTime?
+  createdAt       DateTime         @default(now())
+
+  @@map("direct_messages")
+}
+
+model CourseChatMessage {
+  id              Int              @id @default(autoincrement())
+  course          Course           @relation(fields: [courseId], references: [id])
+  courseId        Int
+  senderId        Int              // Student or Tutor ID
+  senderType      SENDERTYPE
+  message         String
+  isAnnouncement  Boolean          @default(false) // If true, only tutors can send
+  createdAt       DateTime         @default(now())
+
+  @@map("course_chat_messages")
+}
+
+model TutorPayout {
+  id              Int              @id @default(autoincrement())
+  tutor           Tutor            @relation(fields: [tutorId], references: [id])
+  tutorId         Int
+  amount          Decimal          @db.Decimal(10, 2)
+  commission      Decimal          @db.Decimal(10, 2) // Platform commission
+  netAmount       Decimal          @db.Decimal(10, 2) // Amount after commission
+  status          PAYOUTSTATUS     @default(PENDING)
+  paymentReference String?
+  paidAt          DateTime?
+  createdAt       DateTime         @default(now())
+
+  @@map("tutor_payouts")
+}
+
+model Notification {
+  id              Int              @id @default(autoincrement())
+  student         Student?         @relation(fields: [studentId], references: [id])
+  studentId       Int?
+  tutorId         Int?             // For tutor notifications (can add Tutor relation later if needed)
+  type            NOTIFICATIONTYPE
+  title           String
+  message         String
+  read            Boolean          @default(false)
+  readAt          DateTime?
+  link            String?
+  createdAt       DateTime         @default(now())
+
+  @@map("notifications")
 }
 
 model Review {
@@ -106,10 +273,12 @@ model Admin {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   role         ROLE     @default(SUB)
+  approvedTutors Tutor[]
 
   @@map("admin")
 }
 
+// Enums
 enum ENROLLMENTSTATUS {
   PENDING
   STARTED
@@ -124,6 +293,7 @@ enum CLASSDAY {
   THURSDAY
   FRIDAY
   SATURDAY
+  SUNDAY
 }
 
 enum TIMEOFDAY {
@@ -140,4 +310,59 @@ enum MODE {
 enum ROLE {
   SUPER
   SUB
+}
+
+enum PRICINGMODEL {
+  PER_COURSE
+  PER_SESSION
+}
+
+enum COURSETYPE {
+  ONE_ON_ONE
+  GROUP
+}
+
+enum DAYOFWEEK {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum SESSIONSTATUS {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum BOOKINGSTATUS {
+  CONFIRMED
+  CANCELLED
+  ATTENDED
+  NO_SHOW
+}
+
+enum SENDERTYPE {
+  STUDENT
+  TUTOR
+}
+
+enum PAYOUTSTATUS {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum NOTIFICATIONTYPE {
+  CLASS_REMINDER
+  SCHEDULE_CHANGE
+  MESSAGE
+  ENROLLMENT
+  PAYMENT
+  SYSTEM
 }

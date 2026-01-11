@@ -5,9 +5,10 @@ import { ATStrategy } from './strategies/at.strategy';
 import { RTStrategy } from './strategies/rt.strategy';
 import { JwtModule } from '@nestjs/jwt';
 import { StudentsModule } from '../students/students.module';
+import { TutorsModule } from '../tutors/tutors.module';
 
 @Module({
-  imports: [JwtModule.register({}), StudentsModule],
+  imports: [JwtModule.register({}), StudentsModule, TutorsModule],
   providers: [AuthService, ATStrategy, RTStrategy],
   controllers: [AuthController],
 })

@@ -69,11 +69,12 @@ export class CoursesService {
     });
   }
 
-  async getDetails(id: number): Promise<string> {
+  async getDetails(id: number): Promise<string | null> {
     const course = await this.prisma.course.findUnique({
       where: { id },
+      select: { curriculum: true },
     });
-    return course.details;
+    return course?.curriculum || null;
   }
 
   async getLatestCourses(): Promise<any[]> {
@@ -137,24 +138,31 @@ export class CoursesService {
 
   async createCourse(
     dto: CreateCourseDto,
-    pdf: Express.Multer.File,
+    tutorId: number,
   ): Promise<Course | undefined> {
-    const courseExist = await this.prisma.course.findUnique({
-      where: { title: dto.title },
+    // Check if course with same title exists for this tutor
+    const courseExist = await this.prisma.course.findFirst({
+      where: {
+        tutorId,
+        title: dto.title,
+      },
     });
     if (courseExist)
-      throw new ConflictException('Course with title already exists!');
-
-    // Upload the PDF to Cloudinary
-    const pdfUploadResult = await this.uploadFileToCloudinary(pdf);
-    if (!pdfUploadResult || !pdfUploadResult.secure_url)
-      throw new BadRequestException('PDF upload failed');
+      throw new ConflictException(
+        'Course with this title already exists for this tutor!',
+      );
 
     const course = await this.prisma.course.create({
       data: {
         title: dto.title,
+        description: dto.description,
         price: dto.price,
-        details: pdfUploadResult.secure_url,
+        pricingModel: dto.pricingModel || 'PER_COURSE',
+        courseType: dto.courseType || 'ONE_ON_ONE',
+        maxStudents: dto.maxStudents,
+        curriculum: dto.curriculum,
+        outcomes: dto.outcomes,
+        tutorId,
       },
     });
     if (course) return course;
@@ -180,37 +188,23 @@ export class CoursesService {
   async updateCourse(
     id: number,
     dto: UpdateCourseDto,
-    pdf: Express.Multer.File,
   ): Promise<Course | undefined> {
-    let pdfUploadResult: UploadApiResponse;
-
     // check if course exists
     const courseExist = await this.prisma.course.findUnique({
       where: { id },
     });
     if (!courseExist) throw new NotFoundException('Course not found');
 
-    // If a new PDF is provided, delete the old one and upload the new one
-    if (pdf) {
-      if (courseExist.details) {
-        // Extract the public ID of the old PDF from its URL
-        const publicId = this.extractPublicIdFromUrl(courseExist.details);
-        await this.deleteFileFromCloudinary(publicId); // Delete the old PDF
-      }
-
-      // Upload the new PDF to Cloudinary
-      pdfUploadResult = await this.uploadFileToCloudinary(pdf);
-      if (!pdfUploadResult || !pdfUploadResult.secure_url) {
-        throw new BadRequestException('PDF upload failed');
-      }
-    }
-
-    // Only update fields that are present in the DTO or uploaded
-    const updatedCourseData = {
-      price: dto.price || undefined, // Only update if price is sent
-      title: dto.title || undefined, // Only update if title is sent
-      details: pdfUploadResult?.secure_url || courseExist.details, // Update if a new PDF is uploaded
-    };
+    // Only update fields that are present in the DTO
+    const updatedCourseData: any = {};
+    if (dto.title !== undefined) updatedCourseData.title = dto.title;
+    if (dto.price !== undefined) updatedCourseData.price = dto.price;
+    if (dto.description !== undefined) updatedCourseData.description = dto.description;
+    if (dto.curriculum !== undefined) updatedCourseData.curriculum = dto.curriculum;
+    if (dto.outcomes !== undefined) updatedCourseData.outcomes = dto.outcomes;
+    if (dto.pricingModel !== undefined) updatedCourseData.pricingModel = dto.pricingModel;
+    if (dto.courseType !== undefined) updatedCourseData.courseType = dto.courseType;
+    if (dto.maxStudents !== undefined) updatedCourseData.maxStudents = dto.maxStudents;
 
     // Update the course with the new data
     const updatedCourse = await this.prisma.course.update({
@@ -223,12 +217,6 @@ export class CoursesService {
   }
 
   async deleteCourse(id: number): Promise<Course | undefined> {
-    const course = await this.prisma.course.findUnique({ where: { id } });
-    if (course.details) {
-      // Extract the public ID of the PDF from its URL & delete the pdf file
-      const publicId = this.extractPublicIdFromUrl(course.details);
-      await this.deleteFileFromCloudinary(publicId);
-    }
     return await this.prisma.course.delete({
       where: { id },
     });
@@ -297,58 +285,4 @@ export class CoursesService {
     });
   }
 
-  /*
-   * Cloudinary Functions
-   */
-
-  async uploadFileToCloudinary(
-    file: Express.Multer.File,
-  ): Promise<UploadApiResponse> {
-    return new Promise((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        {
-          folder: 'nerdified/courses',
-          public_id: file.originalname,
-          resource_type: 'raw',
-        },
-        (error, result) => {
-          if (error) {
-            reject(error);
-          } else {
-            resolve(result);
-          }
-        },
-      );
-
-      const bufferStream = new Readable();
-      bufferStream.push(file.buffer);
-      bufferStream.push(null);
-      bufferStream.pipe(uploadStream);
-    });
-  }
-
-  async deleteFileFromCloudinary(publicId: string): Promise<void> {
-    try {
-      const fullPublicId = `nerdified/courses/${publicId}`;
-
-      const result = await cloudinary.uploader.destroy(fullPublicId, {
-        resource_type: 'raw', // Ensure 'raw' resource type for PDFs
-      });
-
-      if (result.result !== 'ok') {
-        throw new Error(
-          `Failed to delete pdf with publicId: ${fullPublicId}, reason: ${result.result}`,
-        );
-      }
-    } catch (error) {
-      throw new Error(`Unable to delete pdf from Cloudinary`);
-    }
-  }
-
-  private extractPublicIdFromUrl(url: string): string {
-    const segments = url.split('/');
-    const fileName = segments.pop(); // file name with extension
-
-    return fileName;
-  }
 }

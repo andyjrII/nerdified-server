@@ -23,7 +23,8 @@ import { SignupDto } from './dto/signup.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { Tokens } from './types/tokens.type';
 import { UpdatePasswordDto } from './dto/update-password.dto';
-import { Student } from '@prisma/client';
+import { Student, Tutor } from '@prisma/client';
+import { TutorSignupDto } from './dto/tutor-signup.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -192,6 +193,98 @@ export class AuthController {
       httpOnly: true,
       secure: true,
       sameSite: 'strict',
+    });
+
+    return {
+      access_token,
+      refresh_token,
+    };
+  }
+
+  /*
+   * Signup endpoint for Tutors
+   */
+  @Public()
+  @Post('tutor/signup')
+  @UseInterceptors(FileInterceptor('image'))
+  @HttpCode(HttpStatus.CREATED)
+  async tutorSignup(
+    @Body() dto: TutorSignupDto,
+    @UploadedFile() image: Express.Multer.File,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<Tokens> {
+    const { access_token, refresh_token } = await this.authService.tutorSignup(
+      dto,
+      image,
+    );
+    res.cookie('refresh_token', refresh_token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+      maxAge: 3 * 24 * 60 * 60 * 1000, // 3 days in milliseconds
+    });
+    return {
+      access_token,
+      refresh_token,
+    };
+  }
+
+  /*
+   * Signin endpoint for Tutor
+   */
+  @Public()
+  @Post('tutor/signin')
+  @HttpCode(HttpStatus.OK)
+  async tutorSignin(
+    @Body() dto: SigninDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<[Tokens, boolean]> {
+    const response = await this.authService.tutorSignin(dto);
+    res.cookie('refresh_token', response[0].refresh_token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+      maxAge: 3 * 24 * 60 * 60 * 1000, // 3 days in milliseconds
+    });
+    return response;
+  }
+
+  /*
+   * Signout endpoint for Tutor
+   */
+  @Public()
+  @Post('tutor/signout')
+  @HttpCode(HttpStatus.OK)
+  async tutorSignout(
+    @Query('email') email: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    res.clearCookie('refresh_token');
+    return await this.authService.tutorSignout(email);
+  }
+
+  /*
+   * Refresh endpoint for Tutor
+   */
+  @UseGuards(RtGuard)
+  @Post('tutor/refresh')
+  @HttpCode(HttpStatus.OK)
+  async tutorRefresh(
+    @GetCurrentUserId() id: number,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<Tokens> {
+    const refreshToken = req.cookies['refresh_token'];
+    if (!refreshToken) throw new BadRequestException('No refresh token found');
+    const { access_token, refresh_token } = await this.authService.tutorRefresh(
+      id,
+      refreshToken,
+    );
+    res.cookie('refresh_token', refresh_token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+      maxAge: 3 * 24 * 60 * 60 * 1000, // 3 days in milliseconds
     });
 
     return {
