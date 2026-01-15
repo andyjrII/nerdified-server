@@ -32,11 +32,20 @@ export class AuthService {
     if (student) throw new BadRequestException('Student already exists!');
 
     // Upload the image to Cloudinary
-    const uploadedImage = await this.studentsService.uploadImageToCloudinary(
-      image,
-    );
+    let uploadedImage;
+    try {
+      console.log('Starting Cloudinary upload for student signup...');
+      uploadedImage = await this.studentsService.uploadImageToCloudinary(image);
+      console.log('Cloudinary upload successful:', uploadedImage?.secure_url);
+    } catch (error: any) {
+      console.error('Cloudinary upload error:', error);
+      throw new BadRequestException(
+        error.message || 'Image upload failed. Please check Cloudinary configuration.',
+      );
+    }
+
     if (!uploadedImage || !uploadedImage.secure_url) {
-      throw new BadRequestException('Image upload failed');
+      throw new BadRequestException('Image upload failed - no URL returned');
     }
 
     // Store user details in the database
@@ -247,13 +256,22 @@ export class AuthService {
     // Upload the image to Cloudinary if provided
     let imagePath: string | undefined;
     if (image) {
-      const uploadedImage = await this.tutorsService.uploadImageToCloudinary(
-        image,
-      );
-      if (!uploadedImage || !uploadedImage.secure_url) {
-        throw new BadRequestException('Image upload failed');
+      try {
+        console.log('Starting Cloudinary upload for tutor signup...');
+        const uploadedImage = await this.tutorsService.uploadImageToCloudinary(
+          image,
+        );
+        console.log('Cloudinary upload successful:', uploadedImage?.secure_url);
+        if (!uploadedImage || !uploadedImage.secure_url) {
+          throw new BadRequestException('Image upload failed - no URL returned');
+        }
+        imagePath = uploadedImage.secure_url;
+      } catch (error: any) {
+        console.error('Cloudinary upload error:', error);
+        throw new BadRequestException(
+          error.message || 'Image upload failed. Please check Cloudinary configuration.',
+        );
       }
-      imagePath = uploadedImage.secure_url;
     }
 
     // Store tutor details in the database

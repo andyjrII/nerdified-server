@@ -1,10 +1,11 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Session, TutorAvailability } from '@prisma/client';
+import { Session, TutorAvailability, SessionBooking } from '@prisma/client';
 
 @Injectable()
 export class SessionsService {
@@ -97,6 +98,124 @@ export class SessionsService {
       },
       orderBy: {
         startTime: 'asc',
+      },
+    });
+  }
+
+  async bookSession(
+    sessionId: number,
+    studentId: number,
+  ): Promise<SessionBooking> {
+    // Check if session exists
+    const session = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+      include: {
+        course: {
+          include: {
+            enrollments: true,
+          },
+        },
+        bookings: true,
+      },
+    });
+
+    if (!session) {
+      throw new NotFoundException('Session not found');
+    }
+
+    // Check if student is enrolled in the course
+    const enrollment = await this.prisma.courseEnrollment.findFirst({
+      where: {
+        courseId: session.courseId,
+        studentId,
+        status: 'STARTED',
+      },
+    });
+
+    if (!enrollment) {
+      throw new BadRequestException(
+        'You must be enrolled in this course to book sessions',
+      );
+    }
+
+    // Check if session is already booked by this student
+    const existingBooking = await this.prisma.sessionBooking.findUnique({
+      where: {
+        sessionId_studentId: {
+          sessionId,
+          studentId,
+        },
+      },
+    });
+
+    if (existingBooking) {
+      throw new ConflictException('You have already booked this session');
+    }
+
+    // Check if session has reached max capacity (for group classes)
+    if (session.course.maxStudents) {
+      const bookingCount = session.bookings.filter(
+        (b) => b.status === 'CONFIRMED',
+      ).length;
+      if (bookingCount >= session.course.maxStudents) {
+        throw new BadRequestException('Session is fully booked');
+      }
+    }
+
+    // Create booking
+    return await this.prisma.sessionBooking.create({
+      data: {
+        sessionId,
+        studentId,
+        status: 'CONFIRMED',
+      },
+    });
+  }
+
+  async getStudentBookings(studentId: number): Promise<SessionBooking[]> {
+    return await this.prisma.sessionBooking.findMany({
+      where: {
+        studentId,
+      },
+      include: {
+        session: {
+          include: {
+            course: true,
+            tutor: true,
+          },
+        },
+      },
+      orderBy: {
+        bookedAt: 'desc',
+      },
+    });
+  }
+
+  async cancelBooking(
+    bookingId: number,
+    studentId: number,
+  ): Promise<SessionBooking> {
+    const booking = await this.prisma.sessionBooking.findUnique({
+      where: { id: bookingId },
+    });
+
+    if (!booking) {
+      throw new NotFoundException('Booking not found');
+    }
+
+    if (booking.studentId !== studentId) {
+      throw new BadRequestException('You can only cancel your own bookings');
+    }
+
+    if (booking.status === 'CANCELLED') {
+      throw new BadRequestException('Booking is already cancelled');
+    }
+
+    return await this.prisma.sessionBooking.update({
+      where: { id: bookingId },
+      data: {
+        status: 'CANCELLED',
+        cancelledAt: new Date(),
       },
     });
   }

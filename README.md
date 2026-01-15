@@ -30,6 +30,18 @@ $ npm run test:e2e
 $ npm run test:cov
 ```
 
-## Run Admin Script
+## Create Admin Account
 
-$ ts-node createAdmin.ts
+To create a test admin account, run:
+
+```bash
+npm run create-admin
+```
+
+This script will create a SUPER admin account with the following test credentials:
+- **Email:** admin@nerdified.com
+- **Password:** Admin@123
+- **Name:** Admin User
+- **Role:** SUPER
+
+**Note:** If an admin with this email already exists, the script will skip creation.

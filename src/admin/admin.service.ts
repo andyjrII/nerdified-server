@@ -1,10 +1,11 @@
 import {
   BadRequestException,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { Admin, ROLE } from '@prisma/client';
+import { Admin, ROLE, Tutor } from '@prisma/client';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import * as bcrypt from 'bcrypt';
 
@@ -40,11 +41,16 @@ export class AdminService {
   }
 
   async getTotal(): Promise<Number[]> {
-    const totalStudents = await this.prisma.student.count({});
-    const totalCourses = await this.prisma.course.count({});
-    const totalPosts = await this.prisma.blog.count({});
+    const [totalStudents, totalCourses, totalPosts, totalTutors, pendingTutors] =
+      await Promise.all([
+        this.prisma.student.count({}),
+        this.prisma.course.count({}),
+        this.prisma.blog.count({}),
+        this.prisma.tutor.count({}),
+        this.prisma.tutor.count({ where: { approved: false } }),
+      ]);
 
-    return [totalStudents, totalCourses, totalPosts];
+    return [totalStudents, totalCourses, totalPosts, totalTutors, pendingTutors];
   }
 
   async getPaymentsByMonth(): Promise<any[]> {
@@ -134,6 +140,103 @@ export class AdminService {
     if (role !== 'SUPER') throw new UnauthorizedException();
     return await this.prisma.admin.delete({
       where: { id },
+    });
+  }
+
+  async getTutors(
+    page: number,
+    search: string,
+    approved?: boolean,
+  ): Promise<Object> {
+    const where: any = {
+      OR: [
+        { name: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+      ],
+    };
+
+    if (approved !== undefined) {
+      where.approved = approved;
+    }
+
+    const [tutors, totalTutors] = await Promise.all([
+      this.prisma.tutor.findMany({
+        where,
+        skip: 20 * (page - 1),
+        take: 20,
+        include: {
+          courses: true,
+          approvedBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      }),
+      this.prisma.tutor.count({ where }),
+    ]);
+
+    return { tutors, totalTutors };
+  }
+
+  async approveTutor(tutorId: number, adminId: number): Promise<Tutor> {
+    const tutor = await this.prisma.tutor.findUnique({
+      where: { id: tutorId },
+    });
+
+    if (!tutor) {
+      throw new NotFoundException('Tutor not found');
+    }
+
+    if (tutor.approved) {
+      throw new BadRequestException('Tutor is already approved');
+    }
+
+    return await this.prisma.tutor.update({
+      where: { id: tutorId },
+      data: {
+        approved: true,
+        approvedAt: new Date(),
+        approvedById: adminId,
+      },
+      include: {
+        courses: true,
+        approvedBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+  }
+
+  async rejectTutor(tutorId: number): Promise<Tutor> {
+    const tutor = await this.prisma.tutor.findUnique({
+      where: { id: tutorId },
+    });
+
+    if (!tutor) {
+      throw new NotFoundException('Tutor not found');
+    }
+
+    // For rejection, we can just set approved to false and clear approval data
+    return await this.prisma.tutor.update({
+      where: { id: tutorId },
+      data: {
+        approved: false,
+        approvedAt: null,
+        approvedById: null,
+      },
+      include: {
+        courses: true,
+      },
     });
   }
 

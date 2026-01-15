@@ -66,6 +66,50 @@ export class MessagesService {
     });
   }
 
+  async getConversation(
+    userId: number,
+    userType: 'STUDENT' | 'TUTOR',
+    otherUserId: number,
+    otherUserType: 'STUDENT' | 'TUTOR',
+  ): Promise<DirectMessage[]> {
+    const where: any = {};
+
+    if (userType === 'STUDENT' && otherUserType === 'TUTOR') {
+      where.OR = [
+        {
+          studentSenderId: userId,
+          tutorReceiverId: otherUserId,
+        },
+        {
+          studentReceiverId: userId,
+          tutorSenderId: otherUserId,
+        },
+      ];
+    } else if (userType === 'TUTOR' && otherUserType === 'STUDENT') {
+      where.OR = [
+        {
+          tutorSenderId: userId,
+          studentReceiverId: otherUserId,
+        },
+        {
+          tutorReceiverId: userId,
+          studentSenderId: otherUserId,
+        },
+      ];
+    } else {
+      throw new BadRequestException(
+        'Direct messages are only between students and tutors',
+      );
+    }
+
+    return await this.prisma.directMessage.findMany({
+      where,
+      orderBy: {
+        createdAt: 'asc',
+      },
+    });
+  }
+
   async markMessageAsRead(messageId: number): Promise<DirectMessage> {
     return await this.prisma.directMessage.update({
       where: { id: messageId },
