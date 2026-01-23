@@ -219,4 +219,78 @@ export class SessionsService {
       },
     });
   }
+
+  async cancelSession(
+    sessionId: number,
+    tutorId: number,
+  ): Promise<Session> {
+    const session = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+      include: {
+        bookings: true,
+      },
+    });
+
+    if (!session) {
+      throw new NotFoundException('Session not found');
+    }
+
+    if (session.tutorId !== tutorId) {
+      throw new BadRequestException(
+        'You can only cancel sessions that belong to you',
+      );
+    }
+
+    if (session.status === 'CANCELLED') {
+      throw new BadRequestException('Session is already cancelled');
+    }
+
+    if (session.status === 'COMPLETED') {
+      throw new BadRequestException('Cannot cancel a completed session');
+    }
+
+    // Update all active bookings to cancelled
+    if (session.bookings && session.bookings.length > 0) {
+      await this.prisma.sessionBooking.updateMany({
+        where: {
+          sessionId,
+          status: 'CONFIRMED',
+        },
+        data: {
+          status: 'CANCELLED',
+          cancelledAt: new Date(),
+        },
+      });
+    }
+
+    return await this.prisma.session.update({
+      where: { id: sessionId },
+      data: {
+        status: 'CANCELLED',
+      },
+    });
+  }
+
+  async deleteAvailability(
+    availabilityId: number,
+    tutorId: number,
+  ): Promise<TutorAvailability> {
+    const availability = await this.prisma.tutorAvailability.findUnique({
+      where: { id: availabilityId },
+    });
+
+    if (!availability) {
+      throw new NotFoundException('Availability not found');
+    }
+
+    if (availability.tutorId !== tutorId) {
+      throw new BadRequestException(
+        'You can only delete your own availability',
+      );
+    }
+
+    return await this.prisma.tutorAvailability.delete({
+      where: { id: availabilityId },
+    });
+  }
 }

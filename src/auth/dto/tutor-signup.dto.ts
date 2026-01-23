@@ -24,8 +24,4 @@ export class TutorSignupDto {
   @IsOptional()
   @IsString()
   qualifications?: string;
-
-  @IsOptional()
-  @IsString()
-  timeZone?: string;
 }

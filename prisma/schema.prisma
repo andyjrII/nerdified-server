@@ -55,7 +55,6 @@ model Tutor {
   messagesSent       DirectMessage[]      @relation("TutorSentMessages")
   messagesReceived   DirectMessage[]      @relation("TutorReceivedMessages")
   payouts            TutorPayout[]
-  timeZone           String               @default("UTC")
 
   @@map("tutors")
 }

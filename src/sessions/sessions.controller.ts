@@ -136,4 +136,33 @@ export class SessionsController {
   ): Promise<SessionBooking> {
     return await this.sessionsService.cancelBooking(bookingId, studentId);
   }
+
+  /*
+   * Cancel a session (Tutor only)
+   */
+  @UseGuards(AtGuard)
+  @Delete(':sessionId')
+  @HttpCode(HttpStatus.OK)
+  async cancelSession(
+    @Param('sessionId', ParseIntPipe) sessionId: number,
+    @GetCurrentUserId() tutorId: number,
+  ): Promise<Session> {
+    return await this.sessionsService.cancelSession(sessionId, tutorId);
+  }
+
+  /*
+   * Delete tutor availability (Tutor only)
+   */
+  @UseGuards(AtGuard)
+  @Delete('availability/:availabilityId')
+  @HttpCode(HttpStatus.OK)
+  async deleteAvailability(
+    @Param('availabilityId', ParseIntPipe) availabilityId: number,
+    @GetCurrentUserId() tutorId: number,
+  ): Promise<TutorAvailability> {
+    return await this.sessionsService.deleteAvailability(
+      availabilityId,
+      tutorId,
+    );
+  }
 }

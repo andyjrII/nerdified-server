@@ -285,7 +285,6 @@ export class AuthService {
         bio: dto.bio,
         qualifications: dto.qualifications,
         imagePath,
-        timeZone: dto.timeZone || 'UTC',
         approved: false, // Tutors need admin approval
       },
     });
