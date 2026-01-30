@@ -36,4 +36,24 @@ export class TutorsController {
   ): Promise<Tutor | undefined> {
     return await this.tutorsService.getTutorById(id);
   }
+
+  /*
+   * Get earnings summary for current tutor
+   */
+  @UseGuards(AtGuard)
+  @Get('me/earnings')
+  @HttpCode(HttpStatus.OK)
+  async getMyEarnings(@GetCurrentUserId() tutorId: number) {
+    return await this.tutorsService.getEarnings(tutorId);
+  }
+
+  /*
+   * Get students enrolled in current tutor's courses
+   */
+  @UseGuards(AtGuard)
+  @Get('me/students')
+  @HttpCode(HttpStatus.OK)
+  async getMyStudents(@GetCurrentUserId() tutorId: number) {
+    return await this.tutorsService.getStudents(tutorId);
+  }
 }

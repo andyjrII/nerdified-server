@@ -6,8 +6,22 @@ import * as cookieParser from 'cookie-parser';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.use(cookieParser());
+  const fromEnv = process.env.FRONTEND_BASE_URL
+    ? process.env.FRONTEND_BASE_URL.split(',').map((u) => u.trim())
+    : [];
+  const devOrigins = ['http://localhost:3101'];
+  const allowedOrigins =
+    process.env.NODE_ENV === 'production'
+      ? fromEnv.length ? fromEnv : devOrigins
+      : [...new Set([...fromEnv, ...devOrigins])];
   app.enableCors({
-    origin: process.env.FRONTEND_BASE_URL,
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     preflightContinue: false,
@@ -15,6 +29,7 @@ async function bootstrap() {
   });
   app.setGlobalPrefix('api');
   app.useGlobalPipes(new ValidationPipe());
-  await app.listen(3001);
+  const port = process.env.PORT ?? 3100;
+  await app.listen(port);
 }
 bootstrap();

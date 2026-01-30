@@ -36,6 +36,139 @@ export class TutorsService {
     return tutor;
   }
 
+  /**
+   * Get earnings summary and enrollments for the tutor's courses
+   */
+  async getEarnings(tutorId: number): Promise<{
+    totalEarnings: number;
+    totalEnrollments: number;
+    byCourse: Array<{ courseId: number; title: string; count: number; revenue: number }>;
+    recentEnrollments: Array<{
+      id: number;
+      paidAmount: number;
+      dateEnrolled: Date;
+      status: string;
+      course: { id: number; title: string };
+      student: { id: number; name: string; email: string };
+    }>;
+  }> {
+    const enrollments = await this.prisma.courseEnrollment.findMany({
+      where: {
+        course: { tutorId },
+      },
+      include: {
+        course: { select: { id: true, title: true } },
+        student: { select: { id: true, name: true, email: true } },
+      },
+      orderBy: { dateEnrolled: 'desc' },
+    });
+
+    let totalEarnings = 0;
+    const byCourseMap = new Map<
+      number,
+      { title: string; count: number; revenue: number }
+    >();
+
+    for (const e of enrollments) {
+      const amount = Number(e.paidAmount);
+      totalEarnings += amount;
+      const existing = byCourseMap.get(e.courseId);
+      if (existing) {
+        existing.count += 1;
+        existing.revenue += amount;
+      } else {
+        byCourseMap.set(e.courseId, {
+          title: e.course.title,
+          count: 1,
+          revenue: amount,
+        });
+      }
+    }
+
+    const byCourse = Array.from(byCourseMap.entries()).map(
+      ([courseId, data]) => ({
+        courseId,
+        title: data.title,
+        count: data.count,
+        revenue: data.revenue,
+      }),
+    );
+
+    const recentEnrollments = enrollments.slice(0, 10).map((e) => ({
+      id: e.id,
+      paidAmount: Number(e.paidAmount),
+      dateEnrolled: e.dateEnrolled,
+      status: e.status,
+      course: e.course,
+      student: e.student,
+    }));
+
+    return {
+      totalEarnings,
+      totalEnrollments: enrollments.length,
+      byCourse,
+      recentEnrollments,
+    };
+  }
+
+  /**
+   * Get unique students enrolled in the tutor's courses
+   */
+  async getStudents(tutorId: number): Promise<
+    Array<{
+      studentId: number;
+      name: string;
+      email: string;
+      coursesEnrolled: number;
+      totalPaid: number;
+      lastEnrolled: Date;
+    }>
+  > {
+    const enrollments = await this.prisma.courseEnrollment.findMany({
+      where: {
+        course: { tutorId },
+      },
+      include: {
+        student: { select: { id: true, name: true, email: true } },
+      },
+      orderBy: { dateEnrolled: 'desc' },
+    });
+
+    const studentMap = new Map<
+      number,
+      { name: string; email: string; coursesEnrolled: number; totalPaid: number; lastEnrolled: Date }
+    >();
+
+    for (const e of enrollments) {
+      const amount = Number(e.paidAmount);
+      const existing = studentMap.get(e.studentId);
+      if (existing) {
+        existing.coursesEnrolled += 1;
+        existing.totalPaid += amount;
+        if (e.dateEnrolled > existing.lastEnrolled) {
+          existing.lastEnrolled = e.dateEnrolled;
+        }
+      } else {
+        studentMap.set(e.studentId, {
+          name: e.student.name,
+          email: e.student.email,
+          coursesEnrolled: 1,
+          totalPaid: amount,
+          lastEnrolled: e.dateEnrolled,
+        });
+      }
+    }
+
+    return Array.from(studentMap.entries()).map(([studentId, data]) => ({
+      studentId,
+      name: data.name,
+      email: data.email,
+      coursesEnrolled: data.coursesEnrolled,
+      totalPaid: data.totalPaid,
+      lastEnrolled: data.lastEnrolled,
+    }));
+  }
+
   async getTutorId(email: string): Promise<number> {
     const tutor = await this.prisma.tutor.findUnique({
       where: { email },
