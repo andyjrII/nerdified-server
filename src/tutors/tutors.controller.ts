@@ -1,8 +1,10 @@
 import {
+  Body,
   Controller,
   Get,
   HttpCode,
   HttpStatus,
+  Patch,
   UseGuards,
   Query,
 } from '@nestjs/common';
@@ -10,6 +12,7 @@ import { TutorsService } from './tutors.service';
 import { AtGuard } from '../common/guards/at.guard';
 import { GetCurrentUserId } from '../common/decorators/get-current-userId.decorator';
 import { Tutor } from '@prisma/client';
+import { UpdateTimezoneDto } from './dto/update-timezone.dto';
 
 @Controller('tutors')
 export class TutorsController {
@@ -34,6 +37,22 @@ export class TutorsController {
   async getCurrentTutor(
     @GetCurrentUserId() id: number,
   ): Promise<Tutor | undefined> {
+    return await this.tutorsService.getTutorById(id);
+  }
+
+  /*
+   * Update current tutor timezone (for scheduling and availability)
+   */
+  @UseGuards(AtGuard)
+  @Patch('me')
+  @HttpCode(HttpStatus.OK)
+  async updateMyProfile(
+    @GetCurrentUserId() id: number,
+    @Body() dto: UpdateTimezoneDto,
+  ): Promise<Tutor> {
+    if (dto.timezone !== undefined) {
+      return await this.tutorsService.updateTimezone(id, dto.timezone);
+    }
     return await this.tutorsService.getTutorById(id);
   }
 

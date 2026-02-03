@@ -177,6 +177,17 @@ export class TutorsService {
     return tutor.id;
   }
 
+  async updateTimezone(tutorId: number, timezone: string): Promise<Tutor> {
+    const tutor = await this.prisma.tutor.findUnique({
+      where: { id: tutorId },
+    });
+    if (!tutor) throw new NotFoundException('Tutor not found');
+    return this.prisma.tutor.update({
+      where: { id: tutorId },
+      data: { timezone },
+    });
+  }
+
   /*
    * Cloudinary Functions
    */

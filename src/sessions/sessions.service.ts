@@ -6,6 +6,43 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Session, TutorAvailability, SessionBooking } from '@prisma/client';
+import { DAYOFWEEK } from '@prisma/client';
+
+const DAY_SHORT_TO_ENUM: Record<string, DAYOFWEEK> = {
+  Mon: 'MONDAY',
+  Tue: 'TUESDAY',
+  Wed: 'WEDNESDAY',
+  Thu: 'THURSDAY',
+  Fri: 'FRIDAY',
+  Sat: 'SATURDAY',
+  Sun: 'SUNDAY',
+};
+
+/** Get day of week and HH:mm in a timezone from a Date (for availability checks) */
+function getLocalDayAndTime(
+  date: Date,
+  timezone: string = 'UTC',
+): { dayOfWeek: DAYOFWEEK; timeHHmm: string } {
+  const dayShort = new Date(date).toLocaleString('en-GB', {
+    timeZone: timezone,
+    weekday: 'short',
+  });
+  const dayOfWeek = DAY_SHORT_TO_ENUM[dayShort] ?? 'MONDAY';
+  const timeHHmm = new Date(date).toLocaleTimeString('en-GB', {
+    timeZone: timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  return { dayOfWeek, timeHHmm };
+}
+
+/** Compare "HH:mm" strings (e.g. "09:00" <= "10:30") */
+function timeLessOrEqual(a: string, b: string): boolean {
+  const [ah, am] = a.split(':').map(Number);
+  const [bh, bm] = b.split(':').map(Number);
+  return ah < bh || (ah === bh && am <= bm);
+}
 
 @Injectable()
 export class SessionsService {
@@ -59,6 +96,62 @@ export class SessionsService {
       );
     }
 
+    if (startTime >= endTime) {
+      throw new BadRequestException('End time must be after start time');
+    }
+
+    if (startTime < new Date()) {
+      throw new BadRequestException('Cannot schedule a session in the past');
+    }
+
+    const tutor = await this.prisma.tutor.findUnique({
+      where: { id: tutorId },
+      include: { availability: true },
+    });
+    const timezone = tutor?.timezone ?? 'UTC';
+
+    // Conflict prevention: no overlap with existing non-cancelled sessions
+    const overlapping = await this.prisma.session.findFirst({
+      where: {
+        tutorId,
+        status: { not: 'CANCELLED' },
+        startTime: { lt: endTime },
+        endTime: { gt: startTime },
+      },
+    });
+    if (overlapping) {
+      throw new ConflictException(
+        'This time slot overlaps with an existing session. Please choose a different time.',
+      );
+    }
+
+    // If tutor has availability set, session must fall within one of the windows (in tutor's timezone)
+    const availabilities = await this.prisma.tutorAvailability.findMany({
+      where: { tutorId, isAvailable: true },
+    });
+    if (availabilities.length > 0) {
+      const startLocal = getLocalDayAndTime(startTime, timezone);
+      const endLocal = getLocalDayAndTime(endTime, timezone);
+      const dayMatch = availabilities.filter(
+        (a) => a.dayOfWeek === startLocal.dayOfWeek,
+      );
+      if (dayMatch.length === 0) {
+        throw new BadRequestException(
+          `You have no availability set for ${startLocal.dayOfWeek}. Please set availability for that day or choose another date.`,
+        );
+      }
+      const withinSome = dayMatch.some(
+        (a) =>
+          timeLessOrEqual(a.startTime, startLocal.timeHHmm) &&
+          timeLessOrEqual(endLocal.timeHHmm, a.endTime),
+      );
+      if (!withinSome) {
+        throw new BadRequestException(
+          'Session time must fall within your set availability window for that day.',
+        );
+      }
+    }
+
     return await this.prisma.session.create({
       data: {
         courseId,
@@ -100,6 +193,79 @@ export class SessionsService {
         startTime: 'asc',
       },
     });
+  }
+
+  /**
+   * Get suggested time slots for creating a session: within tutor availability,
+   * no conflicts with existing sessions, in the given date range.
+   * Returns slots in 30-min steps; duration is in minutes.
+   */
+  async getSuggestedSlots(
+    tutorId: number,
+    courseId: number,
+    from: Date,
+    to: Date,
+    durationMinutes: number = 60,
+  ): Promise<Array<{ start: string; end: string }>> {
+    const course = await this.prisma.course.findFirst({
+      where: { id: courseId, tutorId },
+    });
+    if (!course) return [];
+
+    const tutor = await this.prisma.tutor.findUnique({
+      where: { id: tutorId },
+      include: { availability: true },
+    });
+    const timezone = tutor?.timezone ?? 'UTC';
+    const availabilities =
+      tutor?.availability?.filter((a) => a.isAvailable) ?? [];
+    if (availabilities.length === 0) return [];
+
+    const existingSessions = await this.prisma.session.findMany({
+      where: { tutorId, status: { not: 'CANCELLED' } },
+      select: { startTime: true, endTime: true },
+    });
+
+    const slots: Array<{ start: string; end: string }> = [];
+    const stepMs = 30 * 60 * 1000;
+    const durationMs = durationMinutes * 60 * 1000;
+    const now = new Date();
+
+    for (
+      let slotStart = new Date(from.getTime());
+      slotStart.getTime() + durationMs <= to.getTime();
+      slotStart = new Date(slotStart.getTime() + stepMs)
+    ) {
+      if (slotStart < now) continue;
+      const slotEnd = new Date(slotStart.getTime() + durationMs);
+      const startLocal = getLocalDayAndTime(slotStart, timezone);
+      const endLocal = getLocalDayAndTime(slotEnd, timezone);
+      const dayAvail = availabilities.filter(
+        (a) => a.dayOfWeek === startLocal.dayOfWeek,
+      );
+      const withinSome =
+        dayAvail.length > 0 &&
+        dayAvail.some(
+          (a) =>
+            timeLessOrEqual(a.startTime, startLocal.timeHHmm) &&
+            timeLessOrEqual(endLocal.timeHHmm, a.endTime),
+        );
+      if (!withinSome) continue;
+      const overlaps = existingSessions.some(
+        (s) =>
+          slotStart.getTime() < new Date(s.endTime).getTime() &&
+          slotEnd.getTime() > new Date(s.startTime).getTime(),
+      );
+      if (!overlaps) {
+        slots.push({
+          start: slotStart.toISOString(),
+          end: slotEnd.toISOString(),
+        });
+      }
+      if (slots.length >= 50) break;
+    }
+
+    return slots;
   }
 
   async bookSession(

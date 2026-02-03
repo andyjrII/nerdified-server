@@ -7,6 +7,7 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Query,
   UseGuards,
   Delete,
 } from '@nestjs/common';
@@ -97,6 +98,35 @@ export class SessionsController {
     @GetCurrentUserId() tutorId: number,
   ): Promise<Session[]> {
     return await this.sessionsService.getSessionsByTutor(tutorId);
+  }
+
+  /*
+   * Get suggested time slots for creating a session (Tutor only)
+   * Query: courseId, from (ISO date), to (ISO date), durationMinutes (optional, default 60)
+   */
+  @UseGuards(AtGuard)
+  @Get('suggested-slots')
+  @HttpCode(HttpStatus.OK)
+  async getSuggestedSlots(
+    @GetCurrentUserId() tutorId: number,
+    @Query('courseId', ParseIntPipe) courseId: number,
+    @Query('from') fromStr: string,
+    @Query('to') toStr: string,
+    @Query('durationMinutes') durationMinutes?: string,
+  ) {
+    const from = new Date(fromStr);
+    const to = new Date(toStr);
+    if (isNaN(from.getTime()) || isNaN(to.getTime()) || from >= to) {
+      return [];
+    }
+    const duration = durationMinutes ? parseInt(durationMinutes, 10) : 60;
+    return await this.sessionsService.getSuggestedSlots(
+      tutorId,
+      courseId,
+      from,
+      to,
+      isNaN(duration) ? 60 : duration,
+    );
   }
 
   /*

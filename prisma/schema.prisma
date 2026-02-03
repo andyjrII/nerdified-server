@@ -49,6 +49,7 @@ model Tutor {
   approvedAt         DateTime?
   approvedBy         Admin?               @relation(fields: [approvedById], references: [id])
   approvedById       Int?
+  timezone           String?              // IANA timezone e.g. "America/New_York" for availability & display
   courses            Course[]
   availability       TutorAvailability[]
   sessions           Session[]
