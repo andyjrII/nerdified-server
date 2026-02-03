@@ -94,6 +94,58 @@ export class CoursesService {
     return formattedCourses;
   }
 
+  /**
+   * Featured courses = top-rated with at least minReviewCount reviews.
+   * Used for the home page.
+   */
+  async getFeaturedCourses(
+    limit = 6,
+    minReviewCount = 1,
+  ): Promise<
+    Array<{
+      id: number;
+      title: string;
+      description: string | null;
+      price: string;
+      updatedAt: Date;
+      averageRating: number;
+      reviewCount: number;
+    }>
+  > {
+    const courses = await this.prisma.course.findMany({
+      include: {
+        review: { select: { rating: true } },
+      },
+    });
+
+    const withRating = courses
+      .map((course) => {
+        const count = course.review.length;
+        const averageRating =
+          count > 0
+            ? course.review.reduce((acc, r) => acc + r.rating, 0) / count
+            : 0;
+        return {
+          ...course,
+          reviewCount: count,
+          averageRating: Math.round(averageRating * 10) / 10,
+        };
+      })
+      .filter((c) => c.reviewCount >= minReviewCount)
+      .sort((a, b) => b.averageRating - a.averageRating)
+      .slice(0, limit);
+
+    return withRating.map((course) => ({
+      id: course.id,
+      title: course.title,
+      description: course.description,
+      price: formatCurrency(course.price.toNumber()),
+      updatedAt: course.updatedAt,
+      averageRating: course.averageRating,
+      reviewCount: course.reviewCount,
+    }));
+  }
+
   async getTopEnrolledCourses(): Promise<any[]> {
     const topCourses = await this.prisma.courseEnrollment.groupBy({
       by: ['courseId'],

@@ -28,6 +28,17 @@ export class CoursesController {
   constructor(private readonly coursesService: CoursesService) {}
 
   /*
+   * Returns featured (top-rated) courses for the home page.
+   * Courses must have at least one review; sorted by average rating descending.
+   */
+  @Public()
+  @Get('featured')
+  @HttpCode(HttpStatus.OK)
+  async getFeaturedCourses(): Promise<any[]> {
+    return await this.coursesService.getFeaturedCourses(6, 1);
+  }
+
+  /*
    * Returns all Courses using pagination, search & level as filters
    */
   @Public()
