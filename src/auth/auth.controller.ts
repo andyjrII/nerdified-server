@@ -87,6 +87,7 @@ export class AuthController {
 
   /*
    * Signout endpoint for Student
+   * Requires query param: email (string, non-empty)
    */
   @Public()
   @Post('signout')
@@ -95,8 +96,12 @@ export class AuthController {
     @Query('email') email: string,
     @Res({ passthrough: true }) res: Response,
   ) {
+    const trimmed = typeof email === 'string' ? email.trim() : '';
+    if (!trimmed) {
+      throw new BadRequestException('Email is required for signout');
+    }
     res.clearCookie('refresh_token');
-    return await this.authService.signout(email);
+    return await this.authService.signout(trimmed);
   }
 
   /*
@@ -161,6 +166,7 @@ export class AuthController {
 
   /*
    * Signout endpoint for Admin
+   * Requires query param: email (string, non-empty)
    */
   @Public()
   @Post('admin/signout')
@@ -169,8 +175,12 @@ export class AuthController {
     @Query('email') email: string,
     @Res({ passthrough: true }) res: Response,
   ) {
+    const trimmed = typeof email === 'string' ? email.trim() : '';
+    if (!trimmed) {
+      throw new BadRequestException('Email is required for signout');
+    }
     res.clearCookie('refresh_token');
-    return await this.authService.adminSignout(email);
+    return await this.authService.adminSignout(trimmed);
   }
 
   /*
@@ -251,16 +261,22 @@ export class AuthController {
 
   /*
    * Signout endpoint for Tutor
+   * Query param: email (string, non-empty). If missing, still clears cookie.
    */
   @Public()
   @Post('tutor/signout')
   @HttpCode(HttpStatus.OK)
   async tutorSignout(
-    @Query('email') email: string,
+    @Query('email') email: string | string[],
     @Res({ passthrough: true }) res: Response,
   ) {
     res.clearCookie('refresh_token');
-    return await this.authService.tutorSignout(email);
+    const raw = Array.isArray(email) ? email[0] : email;
+    const trimmed = typeof raw === 'string' ? raw.trim() : '';
+    if (trimmed) {
+      return await this.authService.tutorSignout(trimmed);
+    }
+    return { count: 0 };
   }
 
   /*

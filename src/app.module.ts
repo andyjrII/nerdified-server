@@ -11,6 +11,7 @@ import { WishlistModule } from './wishlist/wishlist.module';
 import { TutorsModule } from './tutors/tutors.module';
 import { SessionsModule } from './sessions/sessions.module';
 import { MessagesModule } from './messages/messages.module';
+import { LivekitModule } from './livekit/livekit.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { MessagesModule } from './messages/messages.module';
     StudentsModule,
     TutorsModule,
     SessionsModule,
+    LivekitModule,
     MessagesModule,
     ReviewsModule,
     WishlistModule,

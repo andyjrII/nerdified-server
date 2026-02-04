@@ -195,4 +195,17 @@ export class SessionsController {
       tutorId,
     );
   }
+
+  /*
+   * Generate a LiveKit token to join a live session (Tutor or booked Student)
+   */
+  @UseGuards(AtGuard)
+  @Post(':sessionId/livekit-token')
+  @HttpCode(HttpStatus.OK)
+  async getLivekitToken(
+    @Param('sessionId', ParseIntPipe) sessionId: number,
+    @GetCurrentUserId() userId: number,
+  ) {
+    return await this.sessionsService.generateLivekitToken(sessionId, userId);
+  }
 }

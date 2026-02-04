@@ -1,12 +1,14 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Session, TutorAvailability, SessionBooking } from '@prisma/client';
 import { DAYOFWEEK } from '@prisma/client';
+import { LivekitService } from '../livekit/livekit.service';
 
 const DAY_SHORT_TO_ENUM: Record<string, DAYOFWEEK> = {
   Mon: 'MONDAY',
@@ -46,7 +48,10 @@ function timeLessOrEqual(a: string, b: string): boolean {
 
 @Injectable()
 export class SessionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly livekit: LivekitService,
+  ) {}
 
   async createAvailability(
     tutorId: number,
@@ -458,5 +463,115 @@ export class SessionsService {
     return await this.prisma.tutorAvailability.delete({
       where: { id: availabilityId },
     });
+  }
+
+  async generateLivekitToken(sessionId: number, userId: number) {
+    const session = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+      include: {
+        tutor: true,
+        course: true,
+      },
+    });
+
+    if (!session) {
+      throw new NotFoundException('Session not found');
+    }
+
+    const startTime = new Date(session.startTime);
+    const endTime = new Date(session.endTime);
+    const now = new Date();
+
+    // Allow participants to join up to 30 minutes before start and until 30 minutes after end
+    const earlyJoinMs = 30 * 60 * 1000;
+    if (now.getTime() + earlyJoinMs < startTime.getTime()) {
+      const minutesUntil = Math.ceil(
+        (startTime.getTime() - now.getTime() - earlyJoinMs) / (60 * 1000),
+      );
+      throw new BadRequestException(
+        `You can join this session closer to the start time (${minutesUntil} minutes remaining).`,
+      );
+    }
+
+    if (now.getTime() - earlyJoinMs > endTime.getTime()) {
+      throw new BadRequestException('This session has already ended.');
+    }
+
+    let participantRole: 'tutor' | 'student' = 'student';
+    let participantName: string | undefined;
+
+    if (session.tutorId === userId) {
+      participantRole = 'tutor';
+      participantName = session.tutor?.name || 'Tutor';
+    } else {
+      const booking = await this.prisma.sessionBooking.findUnique({
+        where: {
+          sessionId_studentId: {
+            sessionId,
+            studentId: userId,
+          },
+        },
+        include: {
+          student: true,
+        },
+      });
+
+      if (!booking || booking.status === 'CANCELLED') {
+        throw new ForbiddenException(
+          'You need an active booking to join this session',
+        );
+      }
+
+      participantName = booking.student?.name || booking.student?.email;
+    }
+
+    const roomName = session.meetingUrl || `session-${session.id}`;
+    if (!session.meetingUrl) {
+      await this.prisma.session.update({
+        where: { id: session.id },
+        data: { meetingUrl: roomName },
+      });
+    }
+
+    // Mark session as in progress when tutor joins
+    if (
+      participantRole === 'tutor' &&
+      session.status === 'SCHEDULED' &&
+      now >= startTime
+    ) {
+      await this.prisma.session.update({
+        where: { id: session.id },
+        data: { status: 'IN_PROGRESS' },
+      });
+    }
+
+    const token = await this.livekit.createParticipantToken({
+      roomName,
+      identity: `${participantRole}-${userId}`,
+      name: participantName,
+      metadata: {
+        sessionId: session.id,
+        role: participantRole,
+      },
+      isPublisher: participantRole === 'tutor',
+      ttlSeconds: 60 * 60,
+    });
+
+    return {
+      token,
+      url: this.livekit.websocketUrl,
+      roomName,
+      participant: {
+        role: participantRole,
+        name: participantName,
+      },
+      session: {
+        id: session.id,
+        title: session.title ?? session.course?.title,
+        startTime: session.startTime,
+        endTime: session.endTime,
+        status: session.status,
+      },
+    };
   }
 }
