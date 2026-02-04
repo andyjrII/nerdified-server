@@ -13,8 +13,10 @@ import {
   Patch,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
-import { Admin, Blog, ROLE, Tutor } from '@prisma/client';
+import { Admin, Tutor, UserRole } from '@prisma/client';
 import { AtGuard } from '../common/guards/at.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import { GetCurrentUserId } from '../common/decorators/get-current-userId.decorator';
 
@@ -25,7 +27,8 @@ export class AdminController {
   /*
    * Returns all Blog Posts using pagination, search, startDate & endDate
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.SUB_ADMIN)
   @Get('blogs/:page')
   @HttpCode(HttpStatus.OK)
   async getPosts(
@@ -50,7 +53,8 @@ export class AdminController {
   /*
    * Get total payments for each months
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.SUB_ADMIN)
   @Get('payments_month')
   @HttpCode(HttpStatus.OK)
   async getPaymentsByMonth(): Promise<any> {
@@ -60,7 +64,8 @@ export class AdminController {
   /*
    * Get all tutors with pagination and search (Admin only)
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.SUB_ADMIN)
   @Get('tutors/:page')
   @HttpCode(HttpStatus.OK)
   async getTutors(
@@ -76,7 +81,8 @@ export class AdminController {
   /*
    * Approve a tutor (Admin only)
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.SUB_ADMIN)
   @Patch('tutors/:id/approve')
   @HttpCode(HttpStatus.OK)
   async approveTutor(
@@ -89,7 +95,8 @@ export class AdminController {
   /*
    * Reject a tutor (Admin only)
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.SUB_ADMIN)
   @Patch('tutors/:id/reject')
   @HttpCode(HttpStatus.OK)
   async rejectTutor(
@@ -101,19 +108,19 @@ export class AdminController {
   /*
    * Returns an Admin
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.SUB_ADMIN)
   @Get(':email')
   @HttpCode(HttpStatus.OK)
   async getAdmin(@Param('email') email: string): Promise<Admin> {
     return await this.adminService.getAdmin(email);
   }
 
-  //Super Admin Endpoint
-
   /*
-   * Creates SUB Admin
+   * Creates new admin (SUPER_ADMIN only). Body includes role for new admin (SUB_ADMIN or SUPER_ADMIN).
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
   async createAdmin(@Body() dto: CreateAdminDto): Promise<Admin> {
@@ -121,29 +128,29 @@ export class AdminController {
   }
 
   /*
-   * Allows SUPER Admin access to all the Admins using pagination & search as filter
+   * List all admins with pagination and search (SUPER_ADMIN only).
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
   @Get('all/:page')
   @HttpCode(HttpStatus.OK)
   async getAdmins(
     @Param('page', ParseIntPipe) page: number,
     @Query('search') search: string,
-    @Query('role') role: ROLE,
   ): Promise<Object> {
-    return await this.adminService.getAdmins(page, search, role);
+    return await this.adminService.getAdmins(page, search);
   }
 
   /*
-   * Allows the SUPER Admin to delete an Admin by Id & returns the remaining Admins
+   * Delete an admin by id (SUPER_ADMIN only).
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   async deleteAdmin(
     @Param('id', ParseIntPipe) id: number,
-    @Query('role') role: ROLE,
   ): Promise<Admin | undefined> {
-    return await this.adminService.deleteAdmin(id, role);
+    return await this.adminService.deleteAdmin(id);
   }
 }

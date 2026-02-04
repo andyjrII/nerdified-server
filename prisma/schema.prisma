@@ -272,13 +272,20 @@ model Admin {
   name         String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-  role         ROLE     @default(SUB)
+  role         UserRole @default(SUB_ADMIN)
   approvedTutors Tutor[]
 
   @@map("admin")
 }
 
 // Enums
+enum UserRole {
+  STUDENT
+  TUTOR
+  SUPER_ADMIN
+  SUB_ADMIN
+}
+
 enum ENROLLMENTSTATUS {
   PENDING
   STARTED
@@ -305,11 +312,6 @@ enum TIMEOFDAY {
 enum MODE {
   ONLINE
   ONSITE
-}
-
-enum ROLE {
-  SUPER
-  SUB
 }
 
 enum PRICINGMODEL {

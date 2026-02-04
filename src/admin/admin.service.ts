@@ -5,7 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { Admin, ROLE, Tutor } from '@prisma/client';
+import { Admin, UserRole, Tutor } from '@prisma/client';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import * as bcrypt from 'bcrypt';
 
@@ -93,10 +93,9 @@ export class AdminService {
     });
   }
 
-  // Super Admin Endpoint
+  // Super Admin only (enforced by RolesGuard in controller)
 
   async createAdmin(dto: CreateAdminDto): Promise<Admin> {
-    if (dto.role !== 'SUPER') throw new UnauthorizedException();
     const password = await this.hashData(dto.password);
     const checkAdmin = await this.prisma.admin.findUnique({
       where: { email: dto.email },
@@ -107,12 +106,12 @@ export class AdminService {
         email: dto.email,
         password,
         name: dto.name,
+        role: dto.role,
       },
     });
   }
 
-  async getAdmins(page: number, search: string, role: ROLE): Promise<Object> {
-    if (role !== 'SUPER') throw new UnauthorizedException();
+  async getAdmins(page: number, search: string): Promise<Object> {
     const [admins, totalAdmins] = await Promise.all([
       await this.prisma.admin.findMany({
         where: {
@@ -136,8 +135,7 @@ export class AdminService {
     return { admins, totalAdmins };
   }
 
-  async deleteAdmin(id: number, role: ROLE): Promise<Admin | undefined> {
-    if (role !== 'SUPER') throw new UnauthorizedException();
+  async deleteAdmin(id: number): Promise<Admin | undefined> {
     return await this.prisma.admin.delete({
       where: { id },
     });

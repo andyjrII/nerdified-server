@@ -10,7 +10,7 @@ import { Tokens } from './types/tokens.type';
 import { JwtService } from '@nestjs/jwt/dist';
 import { SigninDto } from './dto/signin.dto';
 import { UpdatePasswordDto } from './dto/update-password.dto';
-import { Student, Tutor } from '@prisma/client';
+import { Student, Tutor, UserRole } from '@prisma/client';
 import { StudentsService } from '../students/students.service';
 import { TutorsService } from '../tutors/tutors.service';
 import { TutorSignupDto } from './dto/tutor-signup.dto';
@@ -60,56 +60,124 @@ export class AuthService {
         imagePath: uploadedImage.secure_url,
       },
     });
-    const tokens = await this.getTokens(newStudent.id, newStudent.email);
-    await this.updateRT(newStudent.id, tokens.refresh_token);
+    const tokens = await this.getTokens(
+      newStudent.id,
+      newStudent.email,
+      'STUDENT',
+    );
+    await this.updateRT(newStudent.id, tokens.refresh_token, 'STUDENT');
     return tokens;
   }
 
-  async signin(dto: SigninDto): Promise<Tokens> {
-    const student = await this.prisma.student.findUnique({
-      where: {
-        email: dto.email,
-      },
+  /** Unified platform sign-in (student or tutor). Body must include role. */
+  async signin(
+    dto: SigninDto,
+  ): Promise<Tokens | (Tokens & { approved: boolean })> {
+    const role = dto.role;
+    if (!role || (role !== 'STUDENT' && role !== 'TUTOR')) {
+      throw new BadRequestException('role must be STUDENT or TUTOR');
+    }
+    if (role === 'STUDENT') {
+      const student = await this.prisma.student.findUnique({
+        where: { email: dto.email },
+      });
+      if (!student) throw new UnauthorizedException('Access Denied!');
+      const passwordMatches = await bcrypt.compare(
+        dto.password,
+        student.password,
+      );
+      if (!passwordMatches) throw new UnauthorizedException('Access Denied!');
+      const tokens = await this.getTokens(student.id, student.email, 'STUDENT');
+      await this.updateRT(student.id, tokens.refresh_token, 'STUDENT');
+      return tokens;
+    }
+    const tutor = await this.prisma.tutor.findUnique({
+      where: { email: dto.email },
     });
-    if (!student) throw new UnauthorizedException('Access Denied!');
-    const passwordMatches = await bcrypt.compare(
-      dto.password,
-      student.password,
-    );
+    if (!tutor) throw new UnauthorizedException('Access Denied!');
+    const passwordMatches = await bcrypt.compare(dto.password, tutor.password);
     if (!passwordMatches) throw new UnauthorizedException('Access Denied!');
-    const tokens = await this.getTokens(student.id, student.email);
-    await this.updateRT(student.id, tokens.refresh_token);
-    return tokens;
+    const tokens = await this.getTokens(tutor.id, tutor.email, 'TUTOR');
+    await this.updateRT(tutor.id, tokens.refresh_token, 'TUTOR');
+    return { ...tokens, approved: tutor.approved };
   }
 
-  async signout(email: string) {
-    return await this.prisma.student.updateMany({
-      where: {
-        email,
-        refreshToken: {
-          not: null,
-        },
-      },
-      data: {
-        refreshToken: null,
-      },
-    });
+  /** Unified sign-out: clear refresh token in the correct table by role. */
+  async signout(userId: number, role: UserRole) {
+    const r = String(role).toUpperCase();
+    switch (r) {
+      case 'STUDENT':
+        return await this.prisma.student.updateMany({
+          where: { id: userId, refreshToken: { not: null } },
+          data: { refreshToken: null },
+        });
+      case 'TUTOR':
+        return await this.prisma.tutor.updateMany({
+          where: { id: userId, refreshToken: { not: null } },
+          data: { refreshToken: null },
+        });
+      case 'SUPER_ADMIN':
+      case 'SUB_ADMIN':
+        return await this.prisma.admin.updateMany({
+          where: { id: userId, refreshToken: { not: null } },
+          data: { refreshToken: null },
+        });
+      default:
+        // Unknown/legacy role: don't throw; clear cookie already done by controller
+        return { count: 0 };
+    }
   }
 
-  async refresh(id: number, refreshToken: string): Promise<Tokens> {
-    const student = await this.prisma.student.findUnique({
-      where: { id },
-    });
-    if (!student || !student.refreshToken)
-      throw new UnauthorizedException('Access Denied!');
-    const refreshTokenMatches = await bcrypt.compare(
-      refreshToken,
-      student.refreshToken,
-    );
-    if (!refreshTokenMatches) throw new UnauthorizedException('Access Denied!');
-    const tokens = await this.getTokens(student.id, student.email);
-    await this.updateRT(student.id, tokens.refresh_token);
-    return tokens;
+  /** Unified refresh: validate RT and issue new tokens. Role from RT payload. */
+  async refresh(
+    id: number,
+    role: UserRole,
+    refreshToken: string,
+  ): Promise<Tokens> {
+    switch (role) {
+      case 'STUDENT': {
+        const student = await this.prisma.student.findUnique({
+          where: { id },
+        });
+        if (!student?.refreshToken)
+          throw new UnauthorizedException('Access Denied!');
+        const matches = await bcrypt.compare(
+          refreshToken,
+          student.refreshToken,
+        );
+        if (!matches) throw new UnauthorizedException('Access Denied!');
+        const tokens = await this.getTokens(student.id, student.email, 'STUDENT');
+        await this.updateRT(student.id, tokens.refresh_token, 'STUDENT');
+        return tokens;
+      }
+      case 'TUTOR': {
+        const tutor = await this.prisma.tutor.findUnique({
+          where: { id },
+        });
+        if (!tutor?.refreshToken)
+          throw new UnauthorizedException('Access Denied!');
+        const matches = await bcrypt.compare(refreshToken, tutor.refreshToken);
+        if (!matches) throw new UnauthorizedException('Access Denied!');
+        const tokens = await this.getTokens(tutor.id, tutor.email, 'TUTOR');
+        await this.updateRT(tutor.id, tokens.refresh_token, 'TUTOR');
+        return tokens;
+      }
+      case 'SUPER_ADMIN':
+      case 'SUB_ADMIN': {
+        const admin = await this.prisma.admin.findUnique({
+          where: { id },
+        });
+        if (!admin?.refreshToken)
+          throw new UnauthorizedException('Access Denied!');
+        const matches = await bcrypt.compare(refreshToken, admin.refreshToken);
+        if (!matches) throw new UnauthorizedException('Access Denied!');
+        const tokens = await this.getTokens(admin.id, admin.email, admin.role);
+        await this.updateRT(admin.id, tokens.refresh_token, admin.role);
+        return tokens;
+      }
+      default:
+        throw new BadRequestException('Invalid role');
+    }
   }
 
   async changePassword(dto: UpdatePasswordDto): Promise<Student | undefined> {
@@ -138,44 +206,52 @@ export class AuthService {
 
   // helper & utility functions
 
-  async updateRT(userId: number, rt: string) {
-    const refreshToken = await this.hashData(rt);
-    await this.prisma.student.update({
-      where: {
-        id: userId,
-      },
-      data: {
-        refreshToken,
-      },
-    });
+  async updateRT(userId: number, rt: string, role: UserRole) {
+    const hashed = await this.hashData(rt);
+    switch (role) {
+      case 'STUDENT':
+        await this.prisma.student.update({
+          where: { id: userId },
+          data: { refreshToken: hashed },
+        });
+        break;
+      case 'TUTOR':
+        await this.prisma.tutor.update({
+          where: { id: userId },
+          data: { refreshToken: hashed },
+        });
+        break;
+      case 'SUPER_ADMIN':
+      case 'SUB_ADMIN':
+        await this.prisma.admin.update({
+          where: { id: userId },
+          data: { refreshToken: hashed },
+        });
+        break;
+      default:
+        throw new BadRequestException('Invalid role');
+    }
   }
 
   hashData(data: string) {
     return bcrypt.hash(data, 10);
   }
 
-  async getTokens(userId: number, email: string): Promise<Tokens> {
+  async getTokens(
+    userId: number,
+    email: string,
+    role: UserRole,
+  ): Promise<Tokens> {
+    const payload = { sub: userId, email, role };
     const [at, rt] = await Promise.all([
-      this.jwtService.signAsync(
-        {
-          sub: userId,
-          email,
-        },
-        {
-          secret: process.env.AT_SECRET_KEY,
-          expiresIn: '1h',
-        },
-      ),
-      this.jwtService.signAsync(
-        {
-          sub: userId,
-          email,
-        },
-        {
-          secret: process.env.RT_SECRET_KEY,
-          expiresIn: '7d',
-        },
-      ),
+      this.jwtService.signAsync(payload, {
+        secret: process.env.AT_SECRET_KEY,
+        expiresIn: '1h',
+      }),
+      this.jwtService.signAsync(payload, {
+        secret: process.env.RT_SECRET_KEY,
+        expiresIn: '7d',
+      }),
     ]);
     return {
       access_token: at,
@@ -183,62 +259,17 @@ export class AuthService {
     };
   }
 
-  // Admin Functions
-
-  async adminSignin(dto: SigninDto): Promise<[Tokens, string]> {
+  // Admin sign-in (separate form). Returns tokens and admin role.
+  async adminSignin(dto: SigninDto): Promise<[Tokens, UserRole]> {
     const admin = await this.prisma.admin.findUnique({
-      where: {
-        email: dto.email,
-      },
+      where: { email: dto.email },
     });
     if (!admin) throw new UnauthorizedException('Access Denied!');
     const passwordMatches = await bcrypt.compare(dto.password, admin.password);
     if (!passwordMatches) throw new UnauthorizedException('Access Denied!');
-    const tokens = await this.getTokens(admin.id, admin.email);
-    await this.adminUpdateRT(admin.id, tokens.refresh_token);
+    const tokens = await this.getTokens(admin.id, admin.email, admin.role);
+    await this.updateRT(admin.id, tokens.refresh_token, admin.role);
     return [tokens, admin.role];
-  }
-
-  async adminSignout(email: string) {
-    return await this.prisma.admin.updateMany({
-      where: {
-        email,
-        refreshToken: {
-          not: null,
-        },
-      },
-      data: {
-        refreshToken: null,
-      },
-    });
-  }
-
-  async adminRefresh(id: number, refreshToken: string): Promise<Tokens> {
-    const admin = await this.prisma.admin.findUnique({
-      where: { id },
-    });
-    if (!admin || !admin.refreshToken)
-      throw new UnauthorizedException('Access Denied!');
-    const refreshTokenMatches = await bcrypt.compare(
-      refreshToken,
-      admin.refreshToken,
-    );
-    if (!refreshTokenMatches) throw new UnauthorizedException('Access Denied!');
-    const tokens = await this.getTokens(admin.id, admin.email);
-    await this.adminUpdateRT(admin.id, tokens.refresh_token);
-    return tokens;
-  }
-
-  async adminUpdateRT(userId: number, rt: string) {
-    const refreshToken = await this.hashData(rt);
-    await this.prisma.admin.update({
-      where: {
-        id: userId,
-      },
-      data: {
-        refreshToken,
-      },
-    });
   }
 
   // Tutor Functions
@@ -288,64 +319,8 @@ export class AuthService {
         approved: false, // Tutors need admin approval
       },
     });
-    const tokens = await this.getTokens(newTutor.id, newTutor.email);
-    await this.tutorUpdateRT(newTutor.id, tokens.refresh_token);
+    const tokens = await this.getTokens(newTutor.id, newTutor.email, 'TUTOR');
+    await this.updateRT(newTutor.id, tokens.refresh_token, 'TUTOR');
     return tokens;
-  }
-
-  async tutorSignin(dto: SigninDto): Promise<[Tokens, boolean]> {
-    const tutor = await this.prisma.tutor.findUnique({
-      where: {
-        email: dto.email,
-      },
-    });
-    if (!tutor) throw new UnauthorizedException('Access Denied!');
-    const passwordMatches = await bcrypt.compare(dto.password, tutor.password);
-    if (!passwordMatches) throw new UnauthorizedException('Access Denied!');
-    const tokens = await this.getTokens(tutor.id, tutor.email);
-    await this.tutorUpdateRT(tutor.id, tokens.refresh_token);
-    return [tokens, tutor.approved];
-  }
-
-  async tutorSignout(email: string) {
-    return await this.prisma.tutor.updateMany({
-      where: {
-        email,
-        refreshToken: {
-          not: null,
-        },
-      },
-      data: {
-        refreshToken: null,
-      },
-    });
-  }
-
-  async tutorRefresh(id: number, refreshToken: string): Promise<Tokens> {
-    const tutor = await this.prisma.tutor.findUnique({
-      where: { id },
-    });
-    if (!tutor || !tutor.refreshToken)
-      throw new UnauthorizedException('Access Denied!');
-    const refreshTokenMatches = await bcrypt.compare(
-      refreshToken,
-      tutor.refreshToken,
-    );
-    if (!refreshTokenMatches) throw new UnauthorizedException('Access Denied!');
-    const tokens = await this.getTokens(tutor.id, tutor.email);
-    await this.tutorUpdateRT(tutor.id, tokens.refresh_token);
-    return tokens;
-  }
-
-  async tutorUpdateRT(userId: number, rt: string) {
-    const refreshToken = await this.hashData(rt);
-    await this.prisma.tutor.update({
-      where: {
-        id: userId,
-      },
-      data: {
-        refreshToken,
-      },
-    });
   }
 }

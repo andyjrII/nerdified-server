@@ -1,4 +1,4 @@
-import { PrismaClient, ROLE } from '@prisma/client';
+import { PrismaClient, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
@@ -9,7 +9,7 @@ async function createAdmin() {
     const email = 'admin@nerdified.com';
     const password = 'Admin@123';
     const name = 'Admin User';
-    const role: ROLE = 'SUPER';
+    const role: UserRole = 'SUPER_ADMIN';
 
     // Check if admin already exists
     const existingAdmin = await prisma.admin.findUnique({
