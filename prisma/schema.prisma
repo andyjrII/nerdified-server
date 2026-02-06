@@ -70,6 +70,7 @@ model Course {
   maxStudents     Int?               // For group classes, null means one-on-one
   curriculum      String?            // JSON or text
   outcomes        String?            // Learning outcomes
+  status          COURSESTATUS       @default(DRAFT) // DRAFT until sessions added & tutor publishes
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
   tutor           Tutor              @relation(fields: [tutorId], references: [id])
@@ -79,6 +80,7 @@ model Course {
   wishlist        Wishlist[]
   sessions        Session[]
   chatMessages    CourseChatMessage[]
+  addSessionRequests AddSessionRequest[]
 
   @@unique([tutorId, title])
   @@map("courses")
@@ -131,8 +133,47 @@ model Session {
   updatedAt       DateTime         @updatedAt
   bookings        SessionBooking[]
   attendance      SessionAttendance[]
+  rescheduleRequests RescheduleRequest[]
 
   @@map("sessions")
+}
+
+model RescheduleRequest {
+  id                Int       @id @default(autoincrement())
+  session           Session   @relation(fields: [sessionId], references: [id])
+  sessionId         Int
+  requestedStartTime DateTime
+  requestedEndTime   DateTime
+  reason            String
+  status            REQUESTSTATUS @default(PENDING)
+  requestedByTutorId Int      // tutor who requested
+  reviewedByAdminId  Int?     // admin who approved/rejected
+  reviewedAt         DateTime?
+  adminNote          String?
+  createdAt          DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@map("reschedule_requests")
+}
+
+model AddSessionRequest {
+  id                Int       @id @default(autoincrement())
+  course            Course    @relation(fields: [courseId], references: [id])
+  courseId          Int
+  startTime         DateTime
+  endTime           DateTime
+  title             String?
+  description       String?
+  reason            String
+  status            REQUESTSTATUS @default(PENDING)
+  requestedByTutorId Int
+  reviewedByAdminId  Int?
+  reviewedAt         DateTime?
+  adminNote          String?
+  createdAt          DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@map("add_session_requests")
 }
 
 model SessionBooking {
@@ -322,6 +363,17 @@ enum PRICINGMODEL {
 enum COURSETYPE {
   ONE_ON_ONE
   GROUP
+}
+
+enum COURSESTATUS {
+  DRAFT
+  PUBLISHED
+}
+
+enum REQUESTSTATUS {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum DAYOFWEEK {

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Delete,
   HttpCode,
@@ -19,10 +20,15 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import { GetCurrentUserId } from '../common/decorators/get-current-userId.decorator';
+import { SessionsService } from '../sessions/sessions.service';
+import { ReviewRequestDto } from '../sessions/dto/review-request.dto';
 
 @Controller('admin')
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly sessionsService: SessionsService,
+  ) {}
 
   /*
    * Returns all Blog Posts using pagination, search, startDate & endDate
@@ -106,7 +112,75 @@ export class AdminController {
   }
 
   /*
-   * Returns an Admin
+   * Get pending reschedule requests (Admin only)
+   */
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.SUB_ADMIN)
+  @Get('reschedule-requests')
+  @HttpCode(HttpStatus.OK)
+  async getRescheduleRequestsPending() {
+    return await this.sessionsService.getRescheduleRequestsPending();
+  }
+
+  /*
+   * Get pending add-session requests (Admin only)
+   */
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.SUB_ADMIN)
+  @Get('add-session-requests')
+  @HttpCode(HttpStatus.OK)
+  async getAddSessionRequestsPending() {
+    return await this.sessionsService.getAddSessionRequestsPending();
+  }
+
+  /*
+   * Approve or reject reschedule request (Admin only)
+   */
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.SUB_ADMIN)
+  @Patch('reschedule-requests/:id')
+  @HttpCode(HttpStatus.OK)
+  async reviewRescheduleRequest(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ReviewRequestDto,
+    @GetCurrentUserId() adminId: number,
+  ) {
+    if (dto.status !== 'APPROVED' && dto.status !== 'REJECTED') {
+      throw new BadRequestException('status must be APPROVED or REJECTED');
+    }
+    return await this.sessionsService.approveRescheduleRequest(
+      id,
+      adminId,
+      dto.status,
+      dto.adminNote,
+    );
+  }
+
+  /*
+   * Approve or reject add-session request (Admin only)
+   */
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.SUB_ADMIN)
+  @Patch('add-session-requests/:id')
+  @HttpCode(HttpStatus.OK)
+  async reviewAddSessionRequest(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ReviewRequestDto,
+    @GetCurrentUserId() adminId: number,
+  ) {
+    if (dto.status !== 'APPROVED' && dto.status !== 'REJECTED') {
+      throw new BadRequestException('status must be APPROVED or REJECTED');
+    }
+    return await this.sessionsService.approveAddSessionRequest(
+      id,
+      adminId,
+      dto.status,
+      dto.adminNote,
+    );
+  }
+
+  /*
+   * Returns an Admin by email (must be after more specific GET routes)
    */
   @UseGuards(AtGuard, RolesGuard)
   @Roles(UserRole.SUPER_ADMIN, UserRole.SUB_ADMIN)
