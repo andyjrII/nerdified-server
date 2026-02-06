@@ -101,6 +101,12 @@ export class SessionsService {
       );
     }
 
+    if (course.status !== 'DRAFT') {
+      throw new BadRequestException(
+        'Sessions can only be added to a draft course. Once published, use "Add session request" for extra sessions.',
+      );
+    }
+
     if (startTime >= endTime) {
       throw new BadRequestException('End time must be after start time');
     }
@@ -167,6 +173,35 @@ export class SessionsService {
         description,
         status: 'SCHEDULED',
       },
+    });
+  }
+
+  /**
+   * Create a booking for every (enrolled student, session) when enrollment is STARTED.
+   * Called when enrollment status becomes STARTED or when a new session is added (add-session approval).
+   */
+  async createBookingsForEnrolledStudents(courseId: number): Promise<void> {
+    const [enrollments, sessions] = await Promise.all([
+      this.prisma.courseEnrollment.findMany({
+        where: { courseId, status: 'STARTED' },
+        select: { studentId: true },
+      }),
+      this.prisma.session.findMany({
+        where: { courseId, status: { not: 'CANCELLED' } },
+        select: { id: true },
+      }),
+    ]);
+    if (enrollments.length === 0 || sessions.length === 0) return;
+
+    const data: { sessionId: number; studentId: number }[] = [];
+    for (const e of enrollments) {
+      for (const s of sessions) {
+        data.push({ sessionId: s.id, studentId: e.studentId });
+      }
+    }
+    await this.prisma.sessionBooking.createMany({
+      data,
+      skipDuplicates: true,
     });
   }
 
@@ -399,6 +434,7 @@ export class SessionsService {
       where: { id: sessionId },
       include: {
         bookings: true,
+        course: { include: { enrollments: true } },
       },
     });
 
@@ -420,6 +456,15 @@ export class SessionsService {
       throw new BadRequestException('Cannot cancel a completed session');
     }
 
+    const hasEnrolledStudents = session.course.enrollments.some(
+      (e) => e.status === 'STARTED',
+    );
+    if (hasEnrolledStudents) {
+      throw new BadRequestException(
+        'Cannot cancel a session once students have enrolled. Use a Reschedule request for changes.',
+      );
+    }
+
     // Update all active bookings to cancelled
     if (session.bookings && session.bookings.length > 0) {
       await this.prisma.sessionBooking.updateMany({
@@ -439,6 +484,186 @@ export class SessionsService {
       data: {
         status: 'CANCELLED',
       },
+    });
+  }
+
+  // ---------- Reschedule requests ----------
+  async createRescheduleRequest(
+    tutorId: number,
+    sessionId: number,
+    requestedStartTime: Date,
+    requestedEndTime: Date,
+    reason: string,
+  ) {
+    const session = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+      include: { course: true },
+    });
+    if (!session || session.tutorId !== tutorId)
+      throw new NotFoundException('Session not found');
+    if (session.course.status !== 'PUBLISHED')
+      throw new BadRequestException('Course must be published');
+    const hasEnrolled = await this.prisma.courseEnrollment.findFirst({
+      where: { courseId: session.courseId, status: 'STARTED' },
+    });
+    if (!hasEnrolled)
+      throw new BadRequestException(
+        'No students enrolled yet; edit the session directly.',
+      );
+    return this.prisma.rescheduleRequest.create({
+      data: {
+        sessionId,
+        requestedStartTime,
+        requestedEndTime,
+        reason,
+        requestedByTutorId: tutorId,
+      },
+    });
+  }
+
+  async getRescheduleRequestsForTutor(tutorId: number) {
+    return this.prisma.rescheduleRequest.findMany({
+      where: { session: { tutorId } },
+      include: { session: { include: { course: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getRescheduleRequestsPending() {
+    return this.prisma.rescheduleRequest.findMany({
+      where: { status: 'PENDING' },
+      include: { session: { include: { course: true } } },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async approveRescheduleRequest(
+    requestId: number,
+    adminId: number,
+    status: 'APPROVED' | 'REJECTED',
+    adminNote?: string,
+  ) {
+    const req = await this.prisma.rescheduleRequest.findUnique({
+      where: { id: requestId },
+      include: { session: true },
+    });
+    if (!req || req.status !== 'PENDING')
+      throw new NotFoundException('Request not found or already reviewed');
+    await this.prisma.rescheduleRequest.update({
+      where: { id: requestId },
+      data: {
+        status,
+        reviewedByAdminId: adminId,
+        reviewedAt: new Date(),
+        adminNote: adminNote ?? undefined,
+      },
+    });
+    if (status === 'APPROVED') {
+      await this.prisma.session.update({
+        where: { id: req.sessionId },
+        data: {
+          startTime: req.requestedStartTime,
+          endTime: req.requestedEndTime,
+        },
+      });
+    }
+    return this.prisma.rescheduleRequest.findUnique({
+      where: { id: requestId },
+      include: { session: { include: { course: true } } },
+    });
+  }
+
+  // ---------- Add session requests ----------
+  async createAddSessionRequest(
+    tutorId: number,
+    courseId: number,
+    startTime: Date,
+    endTime: Date,
+    reason: string,
+    title?: string,
+    description?: string,
+  ) {
+    const course = await this.prisma.course.findFirst({
+      where: { id: courseId, tutorId },
+      include: { sessions: true },
+    });
+    if (!course) throw new NotFoundException('Course not found');
+    if (course.status !== 'PUBLISHED')
+      throw new BadRequestException('Course must be published');
+    const hasEnrolled = await this.prisma.courseEnrollment.findFirst({
+      where: { courseId, status: 'STARTED' },
+    });
+    if (!hasEnrolled)
+      throw new BadRequestException(
+        'No students enrolled; add sessions from the course draft flow.',
+      );
+    return this.prisma.addSessionRequest.create({
+      data: {
+        courseId,
+        startTime,
+        endTime,
+        title,
+        description,
+        reason,
+        requestedByTutorId: tutorId,
+      },
+    });
+  }
+
+  async getAddSessionRequestsForTutor(tutorId: number) {
+    return this.prisma.addSessionRequest.findMany({
+      where: { course: { tutorId } },
+      include: { course: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getAddSessionRequestsPending() {
+    return this.prisma.addSessionRequest.findMany({
+      where: { status: 'PENDING' },
+      include: { course: true },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async approveAddSessionRequest(
+    requestId: number,
+    adminId: number,
+    status: 'APPROVED' | 'REJECTED',
+    adminNote?: string,
+  ) {
+    const req = await this.prisma.addSessionRequest.findUnique({
+      where: { id: requestId },
+      include: { course: true },
+    });
+    if (!req || req.status !== 'PENDING')
+      throw new NotFoundException('Request not found or already reviewed');
+    await this.prisma.addSessionRequest.update({
+      where: { id: requestId },
+      data: {
+        status,
+        reviewedByAdminId: adminId,
+        reviewedAt: new Date(),
+        adminNote: adminNote ?? undefined,
+      },
+    });
+    if (status === 'APPROVED') {
+      const session = await this.prisma.session.create({
+        data: {
+          courseId: req.courseId,
+          tutorId: req.course.tutorId,
+          startTime: req.startTime,
+          endTime: req.endTime,
+          title: req.title,
+          description: req.description,
+          status: 'SCHEDULED',
+        },
+      });
+      await this.createBookingsForEnrolledStudents(req.courseId);
+    }
+    return this.prisma.addSessionRequest.findUnique({
+      where: { id: requestId },
+      include: { course: true },
     });
   }
 

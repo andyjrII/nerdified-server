@@ -16,7 +16,8 @@ import { AtGuard } from '../common/guards/at.guard';
 import { GetCurrentUserId } from '../common/decorators/get-current-userId.decorator';
 import { CreateAvailabilityDto } from './dto/create-availability.dto';
 import { CreateSessionDto } from './dto/create-session.dto';
-import { BookSessionDto } from './dto/book-session.dto';
+import { CreateRescheduleRequestDto } from './dto/create-reschedule-request.dto';
+import { CreateAddSessionRequestDto } from './dto/create-add-session-request.dto';
 import {
   Session,
   TutorAvailability,
@@ -98,6 +99,66 @@ export class SessionsController {
     @GetCurrentUserId() tutorId: number,
   ): Promise<Session[]> {
     return await this.sessionsService.getSessionsByTutor(tutorId);
+  }
+
+  /*
+   * Create reschedule request (Tutor only)
+   */
+  @UseGuards(AtGuard)
+  @Post('reschedule-requests')
+  @HttpCode(HttpStatus.CREATED)
+  async createRescheduleRequest(
+    @Body() dto: CreateRescheduleRequestDto,
+    @GetCurrentUserId() tutorId: number,
+  ) {
+    return await this.sessionsService.createRescheduleRequest(
+      tutorId,
+      dto.sessionId,
+      new Date(dto.requestedStartTime),
+      new Date(dto.requestedEndTime),
+      dto.reason,
+    );
+  }
+
+  /*
+   * Create add-session request (Tutor only)
+   */
+  @UseGuards(AtGuard)
+  @Post('add-session-requests')
+  @HttpCode(HttpStatus.CREATED)
+  async createAddSessionRequest(
+    @Body() dto: CreateAddSessionRequestDto,
+    @GetCurrentUserId() tutorId: number,
+  ) {
+    return await this.sessionsService.createAddSessionRequest(
+      tutorId,
+      dto.courseId,
+      new Date(dto.startTime),
+      new Date(dto.endTime),
+      dto.reason,
+      dto.title,
+      dto.description,
+    );
+  }
+
+  /*
+   * Get tutor's reschedule requests (Tutor only)
+   */
+  @UseGuards(AtGuard)
+  @Get('reschedule-requests')
+  @HttpCode(HttpStatus.OK)
+  async getRescheduleRequestsForTutor(@GetCurrentUserId() tutorId: number) {
+    return await this.sessionsService.getRescheduleRequestsForTutor(tutorId);
+  }
+
+  /*
+   * Get tutor's add-session requests (Tutor only)
+   */
+  @UseGuards(AtGuard)
+  @Get('add-session-requests')
+  @HttpCode(HttpStatus.OK)
+  async getAddSessionRequestsForTutor(@GetCurrentUserId() tutorId: number) {
+    return await this.sessionsService.getAddSessionRequestsForTutor(tutorId);
   }
 
   /*

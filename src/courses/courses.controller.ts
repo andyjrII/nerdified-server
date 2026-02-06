@@ -52,13 +52,39 @@ export class CoursesController {
   }
 
   /*
-   * Returns a single Course by id
+   * Returns a single Course by id (public: only published)
    */
   @Public()
   @Get('course/:id')
   @HttpCode(HttpStatus.OK)
   async getCourseById(@Param('id', ParseIntPipe) id: number): Promise<Course> {
     return await this.coursesService.getCourseById(id);
+  }
+
+  /*
+   * Tutor: get own course by id (any status, for edit/draft view)
+   */
+  @UseGuards(AtGuard)
+  @Get('course/:id/tutor')
+  @HttpCode(HttpStatus.OK)
+  async getCourseByIdForTutor(
+    @Param('id', ParseIntPipe) id: number,
+    @GetCurrentUserId() tutorId: number,
+  ): Promise<Course> {
+    return await this.coursesService.getCourseByIdForTutor(id, tutorId);
+  }
+
+  /*
+   * Tutor: publish course (must have at least one session)
+   */
+  @UseGuards(AtGuard)
+  @Post(':id/publish')
+  @HttpCode(HttpStatus.OK)
+  async publishCourse(
+    @Param('id', ParseIntPipe) id: number,
+    @GetCurrentUserId() tutorId: number,
+  ): Promise<Course> {
+    return await this.coursesService.publishCourse(id, tutorId);
   }
 
   /*

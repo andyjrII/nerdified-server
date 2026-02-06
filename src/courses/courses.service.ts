@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { SessionsService } from '../sessions/sessions.service';
 import { Course, CourseEnrollment } from '@prisma/client';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
@@ -17,12 +18,16 @@ import { Readable } from 'stream';
 
 @Injectable()
 export class CoursesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private sessionsService: SessionsService,
+  ) {}
 
   async getCourses(page: number, search: string): Promise<Object> {
     const [courses, totalCourses] = await Promise.all([
       this.prisma.course.findMany({
         where: {
+          status: 'PUBLISHED',
           OR: [
             {
               title: { contains: search, mode: 'insensitive' },
@@ -43,7 +48,7 @@ export class CoursesService {
           wishlist: true,
         },
       }),
-      this.prisma.course.count({}),
+      this.prisma.course.count({ where: { status: 'PUBLISHED' } }),
     ]);
 
     const coursesWithAverageRating = courses.map((course) => {
@@ -64,14 +69,17 @@ export class CoursesService {
   }
 
   async getCourseById(id: number): Promise<Course> {
-    return await this.prisma.course.findUnique({
+    const course = await this.prisma.course.findUnique({
       where: { id },
     });
+    if (!course || course.status !== 'PUBLISHED')
+      throw new NotFoundException('Course not found');
+    return course;
   }
 
   async getDetails(id: number): Promise<string | null> {
     const course = await this.prisma.course.findUnique({
-      where: { id },
+      where: { id, status: 'PUBLISHED' },
       select: { curriculum: true },
     });
     return course?.curriculum || null;
@@ -79,6 +87,7 @@ export class CoursesService {
 
   async getLatestCourses(): Promise<any[]> {
     const courses = await this.prisma.course.findMany({
+      where: { status: 'PUBLISHED' },
       orderBy: {
         updatedAt: 'desc',
       },
@@ -96,7 +105,7 @@ export class CoursesService {
 
   /**
    * Featured courses = top-rated with at least minReviewCount reviews.
-   * Used for the home page.
+   * Only published courses. Used for the home page.
    */
   async getFeaturedCourses(
     limit = 6,
@@ -113,6 +122,7 @@ export class CoursesService {
     }>
   > {
     const courses = await this.prisma.course.findMany({
+      where: { status: 'PUBLISHED' },
       include: {
         review: { select: { rating: true } },
       },
@@ -170,9 +180,10 @@ export class CoursesService {
       take: 4,
     });
 
-    // Fetch course details for the top courses
+    // Fetch course details for the top courses (only published)
     const courses = await this.prisma.course.findMany({
       where: {
+        status: 'PUBLISHED',
         id: {
           in: topCourses.map((course) => course.courseId),
         },
@@ -192,7 +203,6 @@ export class CoursesService {
     dto: CreateCourseDto,
     tutorId: number,
   ): Promise<Course | undefined> {
-    // Check if course with same title exists for this tutor
     const courseExist = await this.prisma.course.findFirst({
       where: {
         tutorId,
@@ -215,10 +225,48 @@ export class CoursesService {
         curriculum: dto.curriculum,
         outcomes: dto.outcomes,
         tutorId,
+        status: 'DRAFT',
       },
     });
     if (course) return course;
     return undefined;
+  }
+
+  /** For tutors: get own course by id (any status), with sessions. */
+  async getCourseByIdForTutor(
+    courseId: number,
+    tutorId: number,
+  ): Promise<Course & { sessions: Array<{ id: number; title: string | null; startTime: Date; endTime: Date; status: string }> }> {
+    const course = await this.prisma.course.findFirst({
+      where: { id: courseId, tutorId },
+      include: {
+        sessions: {
+          where: { status: { not: 'CANCELLED' } },
+          orderBy: { startTime: 'asc' },
+        },
+      },
+    });
+    if (!course) throw new NotFoundException('Course not found');
+    return course as Course & { sessions: Array<{ id: number; title: string | null; startTime: Date; endTime: Date; status: string }> };
+  }
+
+  /** Publish course. Only when DRAFT, tutor owns it, and has at least one session. */
+  async publishCourse(courseId: number, tutorId: number): Promise<Course> {
+    const course = await this.prisma.course.findFirst({
+      where: { id: courseId, tutorId },
+      include: { sessions: true },
+    });
+    if (!course) throw new NotFoundException('Course not found');
+    if (course.status === 'PUBLISHED')
+      throw new BadRequestException('Course is already published');
+    if (!course.sessions?.length)
+      throw new BadRequestException(
+        'Add at least one session before publishing the course',
+      );
+    return this.prisma.course.update({
+      where: { id: courseId },
+      data: { status: 'PUBLISHED' },
+    });
   }
 
   async getCourseTitlesAndIds() {
@@ -324,6 +372,9 @@ export class CoursesService {
         status: dto.status,
       },
     });
+    if (dto.status === 'STARTED') {
+      await this.sessionsService.createBookingsForEnrolledStudents(dto.courseId);
+    }
     return await this.prisma.courseEnrollment.findMany({
       skip: 30 * (page - 1),
       take: 30,
