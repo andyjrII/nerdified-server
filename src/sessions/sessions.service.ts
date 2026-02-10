@@ -243,6 +243,125 @@ export class SessionsService {
   }
 
   /**
+   * Duplicate an existing session with new start/end times. Copies title, description, course, and session type.
+   * GROUP: only allowed when course is DRAFT. ONE_ON_ONE: copies enrollment and creates booking for that student.
+   */
+  async duplicateSession(
+    sessionId: number,
+    tutorId: number,
+    startTime: Date,
+    endTime: Date,
+  ): Promise<Session> {
+    const session = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+      include: { course: true, enrollment: { include: { student: true } } },
+    });
+    if (!session) throw new NotFoundException('Session not found');
+    if (session.tutorId !== tutorId) {
+      throw new ForbiddenException('You can only duplicate your own sessions');
+    }
+    if (startTime >= endTime) {
+      throw new BadRequestException('End time must be after start time');
+    }
+    if (startTime < new Date()) {
+      throw new BadRequestException('Cannot schedule a session in the past');
+    }
+
+    const overlapping = await this.prisma.session.findFirst({
+      where: {
+        tutorId,
+        status: { not: 'CANCELLED' },
+        startTime: { lt: endTime },
+        endTime: { gt: startTime },
+      },
+    });
+    if (overlapping) {
+      throw new ConflictException(
+        'This time slot overlaps with an existing session. Please choose a different time.',
+      );
+    }
+
+    if (session.sessionType === 'ONE_ON_ONE') {
+      if (!session.enrollmentId || !session.enrollment) {
+        throw new BadRequestException('Original session has no enrollment; cannot duplicate');
+      }
+      if (session.enrollment.status !== 'STARTED') {
+        throw new BadRequestException('Enrollment is no longer active; cannot duplicate 1:1 session');
+      }
+      const newSession = await this.prisma.session.create({
+        data: {
+          courseId: session.courseId,
+          tutorId,
+          sessionType: 'ONE_ON_ONE',
+          enrollmentId: session.enrollmentId,
+          startTime,
+          endTime,
+          title: session.title,
+          description: session.description,
+          status: 'SCHEDULED',
+        },
+      });
+      await this.prisma.sessionBooking.create({
+        data: {
+          sessionId: newSession.id,
+          studentId: session.enrollment.studentId,
+        },
+      });
+      return newSession;
+    }
+
+    // GROUP session
+    if (session.course.status !== 'DRAFT') {
+      throw new BadRequestException(
+        'Group sessions can only be duplicated for draft courses. For published courses, use "Add session request".',
+      );
+    }
+    const tutor = await this.prisma.tutor.findUnique({
+      where: { id: tutorId },
+      include: { availability: true },
+    });
+    const timezone = tutor?.timezone ?? 'UTC';
+    const availabilities = await this.prisma.tutorAvailability.findMany({
+      where: { tutorId, isAvailable: true },
+    });
+    if (availabilities.length > 0) {
+      const startLocal = getLocalDayAndTime(startTime, timezone);
+      const endLocal = getLocalDayAndTime(endTime, timezone);
+      const dayMatch = availabilities.filter(
+        (a) => a.dayOfWeek === startLocal.dayOfWeek,
+      );
+      if (dayMatch.length === 0) {
+        throw new BadRequestException(
+          `You have no availability set for ${startLocal.dayOfWeek}. Please set availability for that day or choose another date.`,
+        );
+      }
+      const withinSome = dayMatch.some(
+        (a) =>
+          timeLessOrEqual(a.startTime, startLocal.timeHHmm) &&
+          timeLessOrEqual(endLocal.timeHHmm, a.endTime),
+      );
+      if (!withinSome) {
+        throw new BadRequestException(
+          'Session time must fall within your set availability window for that day.',
+        );
+      }
+    }
+
+    return await this.prisma.session.create({
+      data: {
+        courseId: session.courseId,
+        tutorId,
+        sessionType: 'GROUP',
+        startTime,
+        endTime,
+        title: session.title,
+        description: session.description,
+        status: 'SCHEDULED',
+      },
+    });
+  }
+
+  /**
    * Create a booking for every (enrolled student, session) when enrollment is STARTED.
    * Called when enrollment status becomes STARTED or when a new session is added (add-session approval).
    * Only for GROUP sessions and enrollments with deliveryMode GROUP or null (legacy).

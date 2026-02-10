@@ -19,6 +19,7 @@ import { CreateSessionDto } from './dto/create-session.dto';
 import { CreateOneOnOneSessionDto } from './dto/create-one-on-one-session.dto';
 import { CreateRescheduleRequestDto } from './dto/create-reschedule-request.dto';
 import { CreateAddSessionRequestDto } from './dto/create-add-session-request.dto';
+import { DuplicateSessionDto } from './dto/duplicate-session.dto';
 import {
   Session,
   TutorAvailability,
@@ -97,6 +98,25 @@ export class SessionsController {
       new Date(dto.endTime),
       dto.title,
       dto.description,
+    );
+  }
+
+  /*
+   * Duplicate a session with new start/end times (Tutor only). Copies title, description, and type.
+   */
+  @UseGuards(AtGuard)
+  @Post(':sessionId/duplicate')
+  @HttpCode(HttpStatus.CREATED)
+  async duplicateSession(
+    @Param('sessionId', ParseIntPipe) sessionId: number,
+    @Body() dto: DuplicateSessionDto,
+    @GetCurrentUserId() tutorId: number,
+  ): Promise<Session> {
+    return await this.sessionsService.duplicateSession(
+      sessionId,
+      tutorId,
+      new Date(dto.startTime),
+      new Date(dto.endTime),
     );
   }
 
