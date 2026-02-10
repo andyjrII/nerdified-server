@@ -34,6 +34,17 @@ export class UpdateCourseDto {
   @Min(1)
   maxStudents?: number;
 
+  /** When courseType BOTH: 1:1 price */
+  @IsOptional()
+  @IsNumberString()
+  priceOneOnOne?: number;
+
+  /** When courseType BOTH: cap for 1:1 enrollments */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  maxOneOnOneStudents?: number;
+
   @IsOptional()
   @IsString()
   curriculum?: string;

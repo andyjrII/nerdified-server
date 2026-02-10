@@ -22,6 +22,11 @@ export class CreateCourseDto {
   @IsNumberString()
   price: number;
 
+  /** When courseType BOTH: 1:1 price (higher than group price) */
+  @IsOptional()
+  @IsNumberString()
+  priceOneOnOne?: number;
+
   @IsOptional()
   @IsEnum(PRICINGMODEL)
   pricingModel?: PRICINGMODEL;
@@ -34,6 +39,12 @@ export class CreateCourseDto {
   @IsInt()
   @Min(1)
   maxStudents?: number;
+
+  /** When courseType BOTH: cap for 1:1 enrollments */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  maxOneOnOneStudents?: number;
 
   @IsOptional()
   @IsString()

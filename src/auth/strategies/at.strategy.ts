@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, ExtractJwt } from 'passport-jwt';
+import { Request } from 'express';
 import { UserRole } from '@prisma/client';
 
 export type JwtPayload = {
@@ -13,7 +14,12 @@ export type JwtPayload = {
 export class ATStrategy extends PassportStrategy(Strategy, 'jwt-access') {
   constructor() {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        (req: Request) => {
+          return req?.cookies?.['access_token'] ?? null;
+        },
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
+      ]),
       secretOrKey: process.env.AT_SECRET_KEY,
     });
   }

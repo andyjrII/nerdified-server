@@ -214,14 +214,20 @@ export class CoursesService {
         'Course with this title already exists for this tutor!',
       );
 
+    const courseType = dto.courseType || 'ONE_ON_ONE';
+    if (courseType === 'BOTH' && !dto.priceOneOnOne) {
+      throw new BadRequestException('priceOneOnOne is required when courseType is BOTH');
+    }
     const course = await this.prisma.course.create({
       data: {
         title: dto.title,
         description: dto.description,
         price: dto.price,
+        priceOneOnOne: dto.priceOneOnOne != null ? Number(dto.priceOneOnOne) : null,
         pricingModel: dto.pricingModel || 'PER_COURSE',
-        courseType: dto.courseType || 'ONE_ON_ONE',
+        courseType,
         maxStudents: dto.maxStudents,
+        maxOneOnOneStudents: dto.maxOneOnOneStudents ?? null,
         curriculum: dto.curriculum,
         outcomes: dto.outcomes,
         tutorId,
@@ -299,12 +305,14 @@ export class CoursesService {
     const updatedCourseData: any = {};
     if (dto.title !== undefined) updatedCourseData.title = dto.title;
     if (dto.price !== undefined) updatedCourseData.price = dto.price;
+    if (dto.priceOneOnOne !== undefined) updatedCourseData.priceOneOnOne = dto.priceOneOnOne != null ? Number(dto.priceOneOnOne) : null;
     if (dto.description !== undefined) updatedCourseData.description = dto.description;
     if (dto.curriculum !== undefined) updatedCourseData.curriculum = dto.curriculum;
     if (dto.outcomes !== undefined) updatedCourseData.outcomes = dto.outcomes;
     if (dto.pricingModel !== undefined) updatedCourseData.pricingModel = dto.pricingModel;
     if (dto.courseType !== undefined) updatedCourseData.courseType = dto.courseType;
     if (dto.maxStudents !== undefined) updatedCourseData.maxStudents = dto.maxStudents;
+    if (dto.maxOneOnOneStudents !== undefined) updatedCourseData.maxOneOnOneStudents = dto.maxOneOnOneStudents ?? null;
 
     // Update the course with the new data
     const updatedCourse = await this.prisma.course.update({

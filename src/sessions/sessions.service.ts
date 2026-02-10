@@ -167,6 +167,7 @@ export class SessionsService {
       data: {
         courseId,
         tutorId,
+        sessionType: 'GROUP',
         startTime,
         endTime,
         title,
@@ -177,17 +178,92 @@ export class SessionsService {
   }
 
   /**
+   * Create a 1:1 session for an enrolled student. Tutor and student agree on times via chat.
+   * Creates the session and a SessionBooking for that student.
+   */
+  async createOneOnOneSession(
+    tutorId: number,
+    enrollmentId: number,
+    startTime: Date,
+    endTime: Date,
+    title?: string,
+    description?: string,
+  ): Promise<Session> {
+    const enrollment = await this.prisma.courseEnrollment.findUnique({
+      where: { id: enrollmentId },
+      include: { course: true, student: true },
+    });
+    if (!enrollment) throw new NotFoundException('Enrollment not found');
+    if (enrollment.course.tutorId !== tutorId) {
+      throw new ForbiddenException('You can only create 1:1 sessions for your own course enrollments');
+    }
+    if (enrollment.deliveryMode !== 'ONE_ON_ONE') {
+      throw new BadRequestException('Enrollment must be ONE_ON_ONE delivery mode');
+    }
+    if (enrollment.status !== 'STARTED') {
+      throw new BadRequestException('Enrollment must be STARTED to create 1:1 sessions');
+    }
+    if (startTime >= endTime) throw new BadRequestException('End time must be after start time');
+    if (startTime < new Date()) throw new BadRequestException('Cannot schedule a session in the past');
+
+    const overlapping = await this.prisma.session.findFirst({
+      where: {
+        tutorId,
+        status: { not: 'CANCELLED' },
+        startTime: { lt: endTime },
+        endTime: { gt: startTime },
+      },
+    });
+    if (overlapping) {
+      throw new ConflictException(
+        'This time slot overlaps with an existing session. Please choose a different time.',
+      );
+    }
+
+    const session = await this.prisma.session.create({
+      data: {
+        courseId: enrollment.courseId,
+        tutorId,
+        sessionType: 'ONE_ON_ONE',
+        enrollmentId,
+        startTime,
+        endTime,
+        title,
+        description,
+        status: 'SCHEDULED',
+      },
+    });
+    await this.prisma.sessionBooking.create({
+      data: {
+        sessionId: session.id,
+        studentId: enrollment.studentId,
+      },
+    });
+    return session;
+  }
+
+  /**
    * Create a booking for every (enrolled student, session) when enrollment is STARTED.
    * Called when enrollment status becomes STARTED or when a new session is added (add-session approval).
+   * Only for GROUP sessions and enrollments with deliveryMode GROUP or null (legacy).
+   * ONE_ON_ONE enrollments get bookings when tutor creates 1:1 sessions via createOneOnOneSession.
    */
   async createBookingsForEnrolledStudents(courseId: number): Promise<void> {
     const [enrollments, sessions] = await Promise.all([
       this.prisma.courseEnrollment.findMany({
-        where: { courseId, status: 'STARTED' },
+        where: {
+          courseId,
+          status: 'STARTED',
+          OR: [{ deliveryMode: 'GROUP' }, { deliveryMode: null }],
+        },
         select: { studentId: true },
       }),
       this.prisma.session.findMany({
-        where: { courseId, status: { not: 'CANCELLED' } },
+        where: {
+          courseId,
+          status: { not: 'CANCELLED' },
+          sessionType: 'GROUP',
+        },
         select: { id: true },
       }),
     ]);
@@ -652,6 +728,7 @@ export class SessionsService {
         data: {
           courseId: req.courseId,
           tutorId: req.course.tutorId,
+          sessionType: 'GROUP',
           startTime: req.startTime,
           endTime: req.endTime,
           title: req.title,

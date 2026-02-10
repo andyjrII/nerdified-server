@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Patch,
@@ -28,11 +29,18 @@ import { Student } from '@prisma/client';
 import { TutorSignupDto } from './dto/tutor-signup.dto';
 import { JwtPayload } from './strategies/at.strategy';
 
-const cookieOptions = {
+const refreshCookieOptions = {
   httpOnly: true,
-  secure: true,
-  sameSite: 'strict' as const,
-  maxAge: 3 * 24 * 60 * 60 * 1000, // 3 days
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax' as const,
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days (matches RT expiry)
+};
+
+const accessCookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax' as const,
+  maxAge: 60 * 60 * 1000, // 1 hour in ms (matches AT expiry)
 };
 
 @Controller('auth')
@@ -47,7 +55,7 @@ export class AuthController {
     @Body() dto: SignupDto,
     @UploadedFile() image: Express.Multer.File,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<Tokens> {
+  ): Promise<{ email: string; role: string }> {
     if (!image) {
       throw new BadRequestException('Image is required');
     }
@@ -55,8 +63,9 @@ export class AuthController {
       dto,
       image,
     );
-    res.cookie('refresh_token', refresh_token, cookieOptions);
-    return { access_token, refresh_token };
+    res.cookie('refresh_token', refresh_token, refreshCookieOptions);
+    res.cookie('access_token', access_token, accessCookieOptions);
+    return { email: dto.email, role: 'STUDENT' };
   }
 
   /** Unified sign-in for student and tutor. Body must include role (STUDENT | TUTOR). */
@@ -69,8 +78,10 @@ export class AuthController {
   ) {
     const result = await this.authService.signin(dto);
     const { access_token, refresh_token } = result;
-    res.cookie('refresh_token', refresh_token, cookieOptions);
-    return result;
+    const approved = 'approved' in result ? result.approved : undefined;
+    res.cookie('refresh_token', refresh_token, refreshCookieOptions);
+    res.cookie('access_token', access_token, accessCookieOptions);
+    return { email: dto.email, role: dto.role, approved };
   }
 
   /** Unified sign-out. Requires valid access token (identity and role from JWT). */
@@ -82,6 +93,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     res.clearCookie('refresh_token');
+    res.clearCookie('access_token');
     const id = typeof user.sub === 'number' ? user.sub : Number(user.sub);
     const role = user?.role;
     const r = role != null ? String(role).toUpperCase() : '';
@@ -100,13 +112,14 @@ export class AuthController {
     @GetCurrentUser() user: JwtPayload,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<Tokens> {
+  ): Promise<{ message: string }> {
     const refreshToken = req.cookies?.['refresh_token'];
     if (!refreshToken) throw new BadRequestException('No refresh token found');
     const id = typeof user.sub === 'number' ? user.sub : Number(user.sub);
     const tokens = await this.authService.refresh(id, user.role, refreshToken);
-    res.cookie('refresh_token', tokens.refresh_token, cookieOptions);
-    return tokens;
+    res.cookie('refresh_token', tokens.refresh_token, refreshCookieOptions);
+    res.cookie('access_token', tokens.access_token, accessCookieOptions);
+    return { message: 'Token refreshed' };
   }
 
   @UseGuards(AtGuard)
@@ -126,8 +139,9 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const [tokens, role] = await this.authService.adminSignin(dto);
-    res.cookie('refresh_token', tokens.refresh_token, cookieOptions);
-    return [tokens, role];
+    res.cookie('refresh_token', tokens.refresh_token, refreshCookieOptions);
+    res.cookie('access_token', tokens.access_token, accessCookieOptions);
+    return { email: dto.email, role };
   }
 
   @Public()
@@ -138,10 +152,18 @@ export class AuthController {
     @Body() dto: TutorSignupDto,
     @UploadedFile() image: Express.Multer.File,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<Tokens> {
+  ): Promise<{ email: string; role: string }> {
     const { access_token, refresh_token } =
       await this.authService.tutorSignup(dto, image);
-    res.cookie('refresh_token', refresh_token, cookieOptions);
-    return { access_token, refresh_token };
+    res.cookie('refresh_token', refresh_token, refreshCookieOptions);
+    res.cookie('access_token', access_token, accessCookieOptions);
+    return { email: dto.email, role: 'TUTOR' };
+  }
+
+  /** Returns current user from access token cookie. Used by client to establish auth state. */
+  @UseGuards(AtGuard)
+  @Get('me')
+  async me(@GetCurrentUser() user: JwtPayload) {
+    return { email: user.email, role: user.role };
   }
 }

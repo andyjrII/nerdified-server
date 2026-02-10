@@ -34,6 +34,13 @@ export class StudentsService {
   }
 
   async courseEnrollment(dto: CourseEnrollmentDto): Promise<CourseEnrollment> {
+    const course = await this.prisma.course.findUnique({
+      where: { id: dto.courseId },
+    });
+    if (!course) throw new NotFoundException('Course not found');
+    if (course.courseType === 'BOTH' && !dto.deliveryMode) {
+      throw new BadRequestException('deliveryMode (GROUP or ONE_ON_ONE) is required when course offers both');
+    }
     const studentId = await this.getStudentId(dto.email);
     const enrollment = await this.prisma.courseEnrollment.create({
       data: {
@@ -41,6 +48,7 @@ export class StudentsService {
         courseId: dto.courseId,
         paidAmount: dto.amount,
         reference: dto.reference,
+        deliveryMode: dto.deliveryMode ?? null,
       },
     });
     if (enrollment) return enrollment;

@@ -16,6 +16,7 @@ import { AtGuard } from '../common/guards/at.guard';
 import { GetCurrentUserId } from '../common/decorators/get-current-userId.decorator';
 import { CreateAvailabilityDto } from './dto/create-availability.dto';
 import { CreateSessionDto } from './dto/create-session.dto';
+import { CreateOneOnOneSessionDto } from './dto/create-one-on-one-session.dto';
 import { CreateRescheduleRequestDto } from './dto/create-reschedule-request.dto';
 import { CreateAddSessionRequestDto } from './dto/create-add-session-request.dto';
 import {
@@ -71,6 +72,27 @@ export class SessionsController {
     return await this.sessionsService.createSession(
       dto.courseId,
       tutorId,
+      new Date(dto.startTime),
+      new Date(dto.endTime),
+      dto.title,
+      dto.description,
+    );
+  }
+
+  /*
+   * Create a 1:1 session for an enrolled student (Tutor only).
+   * Tutor and student agree on times via chat; tutor creates the session here.
+   */
+  @UseGuards(AtGuard)
+  @Post('one-on-one')
+  @HttpCode(HttpStatus.CREATED)
+  async createOneOnOneSession(
+    @Body() dto: CreateOneOnOneSessionDto,
+    @GetCurrentUserId() tutorId: number,
+  ): Promise<Session> {
+    return await this.sessionsService.createOneOnOneSession(
+      tutorId,
+      dto.enrollmentId,
       new Date(dto.startTime),
       new Date(dto.endTime),
       dto.title,
