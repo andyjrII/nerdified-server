@@ -7,7 +7,7 @@ import {
   IsInt,
   Min,
 } from 'class-validator';
-import { PRICINGMODEL, COURSETYPE } from '@prisma/client';
+import { COURSETYPE } from '@prisma/client';
 
 export class CreateCourseDto {
   @IsNotEmpty()
@@ -26,10 +26,6 @@ export class CreateCourseDto {
   @IsOptional()
   @IsNumberString()
   priceOneOnOne?: number;
-
-  @IsOptional()
-  @IsEnum(PRICINGMODEL)
-  pricingModel?: PRICINGMODEL;
 
   @IsOptional()
   @IsEnum(COURSETYPE)

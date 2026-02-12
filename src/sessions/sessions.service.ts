@@ -101,12 +101,6 @@ export class SessionsService {
       );
     }
 
-    if (course.status !== 'DRAFT') {
-      throw new BadRequestException(
-        'Sessions can only be added to a draft course. Once published, use "Add session request" for extra sessions.',
-      );
-    }
-
     if (startTime >= endTime) {
       throw new BadRequestException('End time must be after start time');
     }
@@ -163,7 +157,7 @@ export class SessionsService {
       }
     }
 
-    return await this.prisma.session.create({
+    const newSession = await this.prisma.session.create({
       data: {
         courseId,
         tutorId,
@@ -175,6 +169,10 @@ export class SessionsService {
         status: 'SCHEDULED',
       },
     });
+    if (course.status === 'PUBLISHED') {
+      await this.createBookingsForEnrolledStudents(courseId);
+    }
+    return newSession;
   }
 
   /**

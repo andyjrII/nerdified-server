@@ -224,7 +224,6 @@ export class CoursesService {
         description: dto.description,
         price: dto.price,
         priceOneOnOne: dto.priceOneOnOne != null ? Number(dto.priceOneOnOne) : null,
-        pricingModel: dto.pricingModel || 'PER_COURSE',
         courseType,
         maxStudents: dto.maxStudents,
         maxOneOnOneStudents: dto.maxOneOnOneStudents ?? null,
@@ -309,7 +308,6 @@ export class CoursesService {
     if (dto.description !== undefined) updatedCourseData.description = dto.description;
     if (dto.curriculum !== undefined) updatedCourseData.curriculum = dto.curriculum;
     if (dto.outcomes !== undefined) updatedCourseData.outcomes = dto.outcomes;
-    if (dto.pricingModel !== undefined) updatedCourseData.pricingModel = dto.pricingModel;
     if (dto.courseType !== undefined) updatedCourseData.courseType = dto.courseType;
     if (dto.maxStudents !== undefined) updatedCourseData.maxStudents = dto.maxStudents;
     if (dto.maxOneOnOneStudents !== undefined) updatedCourseData.maxOneOnOneStudents = dto.maxOneOnOneStudents ?? null;
@@ -325,9 +323,92 @@ export class CoursesService {
   }
 
   async deleteCourse(id: number): Promise<Course | undefined> {
-    return await this.prisma.course.delete({
-      where: { id },
+    const course = await this.prisma.course.findUnique({ where: { id } });
+    if (!course) return undefined;
+    await this.prisma.$transaction(async (tx) => {
+      const sessions = await tx.session.findMany({ where: { courseId: id }, select: { id: true } });
+      const sessionIds = sessions.map((s) => s.id);
+      if (sessionIds.length > 0) {
+        await tx.sessionBooking.deleteMany({ where: { sessionId: { in: sessionIds } } });
+        await tx.sessionAttendance.deleteMany({ where: { sessionId: { in: sessionIds } } });
+        await tx.rescheduleRequest.deleteMany({ where: { sessionId: { in: sessionIds } } });
+      }
+      await tx.session.deleteMany({ where: { courseId: id } });
+      await tx.addSessionRequest.deleteMany({ where: { courseId: id } });
+      await tx.courseChatMessage.deleteMany({ where: { courseId: id } });
+      await tx.wishlist.deleteMany({ where: { courseId: id } });
+      await tx.review.deleteMany({ where: { courseId: id } });
+      await tx.courseEnrollment.deleteMany({ where: { courseId: id } });
+      await tx.course.delete({ where: { id } });
     });
+    return course;
+  }
+
+  /**
+   * Duplicate a course and all its GROUP sessions. New course is DRAFT.
+   * Returns the new course (with sessions) so client can navigate to edit.
+   */
+  async duplicateCourse(
+    courseId: number,
+    tutorId: number,
+  ): Promise<Course & { sessions: Array<{ id: number; title: string | null; startTime: Date; endTime: Date; status: string }> }> {
+    const course = await this.prisma.course.findFirst({
+      where: { id: courseId, tutorId },
+      include: {
+        sessions: {
+          where: { sessionType: 'GROUP', status: { not: 'CANCELLED' } },
+          orderBy: { startTime: 'asc' },
+        },
+      },
+    });
+    if (!course) throw new NotFoundException('Course not found');
+
+    let newTitle = `${course.title} (Copy)`;
+    let exists = await this.prisma.course.findFirst({
+      where: { tutorId, title: newTitle },
+    });
+    let n = 1;
+    while (exists) {
+      newTitle = `${course.title} (Copy ${++n})`;
+      exists = await this.prisma.course.findFirst({
+        where: { tutorId, title: newTitle },
+      });
+    }
+
+    const newCourse = await this.prisma.course.create({
+      data: {
+        tutorId,
+        title: newTitle,
+        description: course.description,
+        price: course.price,
+        priceOneOnOne: course.priceOneOnOne,
+        courseType: course.courseType,
+        maxStudents: course.maxStudents,
+        maxOneOnOneStudents: course.maxOneOnOneStudents,
+        curriculum: course.curriculum,
+        outcomes: course.outcomes,
+        status: 'DRAFT',
+      },
+    });
+
+    for (const s of course.sessions) {
+      await this.prisma.session.create({
+        data: {
+          courseId: newCourse.id,
+          tutorId,
+          sessionType: 'GROUP',
+          startTime: s.startTime,
+          endTime: s.endTime,
+          title: s.title,
+          description: s.description,
+          status: 'SCHEDULED',
+        },
+      });
+    }
+
+    return this.getCourseByIdForTutor(newCourse.id, tutorId) as Promise<
+      Course & { sessions: Array<{ id: number; title: string | null; startTime: Date; endTime: Date; status: string }> }
+    >;
   }
 
   async coursePayments(

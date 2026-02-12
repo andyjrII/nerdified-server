@@ -66,7 +66,6 @@ model Course {
   description         String?
   price               Decimal            @default(0) @db.Decimal(10, 2)
   priceOneOnOne       Decimal?           @db.Decimal(10, 2) // When courseType BOTH, 1:1 price (higher)
-  pricingModel        PRICINGMODEL       @default(PER_COURSE)
   courseType          COURSETYPE         @default(ONE_ON_ONE)
   maxStudents         Int?               // For group classes, null means one-on-one
   maxOneOnOneStudents Int?               // When courseType BOTH, cap for 1:1 enrollments
@@ -360,11 +359,6 @@ enum TIMEOFDAY {
 enum MODE {
   ONLINE
   ONSITE
-}
-
-enum PRICINGMODEL {
-  PER_COURSE
-  PER_SESSION
 }
 
 enum COURSETYPE {

@@ -88,6 +88,19 @@ export class CoursesController {
   }
 
   /*
+   * Tutor: duplicate course with all its GROUP sessions. New course is DRAFT. Returns new course with sessions.
+   */
+  @UseGuards(AtGuard)
+  @Post('duplicate/:id')
+  @HttpCode(HttpStatus.CREATED)
+  async duplicateCourse(
+    @Param('id', ParseIntPipe) id: number,
+    @GetCurrentUserId() tutorId: number,
+  ) {
+    return await this.coursesService.duplicateCourse(id, tutorId);
+  }
+
+  /*
    * Returns the outline of a Course by id
    */
   @Public()
