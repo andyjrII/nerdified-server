@@ -64,6 +64,7 @@ model Course {
   id                  Int                @id @default(autoincrement())
   title               String
   description         String?
+  imagePath           String?            // Cloudinary URL; null = use default placeholder
   price               Decimal            @default(0) @db.Decimal(10, 2)
   priceOneOnOne       Decimal?           @db.Decimal(10, 2) // When courseType BOTH, 1:1 price (higher)
   courseType          COURSETYPE         @default(ONE_ON_ONE)

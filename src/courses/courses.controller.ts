@@ -12,7 +12,10 @@ import {
   BadRequestException,
   Query,
   UseGuards,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { CoursesService } from './courses.service';
 import { Course, CourseEnrollment } from '@prisma/client';
 import { CreateCourseDto } from './dto/create-course.dto';
@@ -166,6 +169,23 @@ export class CoursesController {
     @Body() dto: UpdateCourseDto,
   ): Promise<Course | undefined> {
     return await this.coursesService.updateCourse(id, dto);
+  }
+
+  /*
+   * Upload course image (Cloudinary folder: nerdified/courses). Replaces existing; old image is deleted.
+   */
+  @UseGuards(AtGuard)
+  @Patch('course/:id/upload-image')
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(FileInterceptor('image'))
+  async uploadCourseImage(
+    @Param('id', ParseIntPipe) id: number,
+    @GetCurrentUserId() tutorId: number,
+    @UploadedFile() image: Express.Multer.File,
+  ): Promise<{ imagePath: string }> {
+    if (!image) throw new BadRequestException('Image file is required');
+    const imagePath = await this.coursesService.uploadCourseImage(id, tutorId, image);
+    return { imagePath };
   }
 
   /*

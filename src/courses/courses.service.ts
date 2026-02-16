@@ -322,6 +322,86 @@ export class CoursesService {
     return undefined;
   }
 
+  /**
+   * Upload course image to Cloudinary (folder: nerdified/courses). Replaces existing image (deletes old one).
+   */
+  async uploadCourseImage(
+    courseId: number,
+    tutorId: number,
+    file: Express.Multer.File,
+  ): Promise<string> {
+    const course = await this.prisma.course.findFirst({
+      where: { id: courseId, tutorId },
+      select: { imagePath: true },
+    });
+    if (!course) throw new NotFoundException('Course not found');
+
+    if (course.imagePath) {
+      const publicId = this.extractCourseImagePublicId(course.imagePath);
+      await this.deleteCourseImageFromCloudinary(publicId);
+    }
+
+    const uploadResult = await this.uploadCourseImageToCloudinary(file);
+    if (!uploadResult?.secure_url) throw new BadRequestException('Image upload failed');
+
+    await this.prisma.course.update({
+      where: { id: courseId },
+      data: { imagePath: uploadResult.secure_url },
+    });
+    return uploadResult.secure_url;
+  }
+
+  private async uploadCourseImageToCloudinary(
+    file: Express.Multer.File,
+  ): Promise<UploadApiResponse> {
+    if (!process.env.CLOUD_NAME || !process.env.API_KEY || !process.env.API_SECRET) {
+      throw new BadRequestException('Cloudinary is not configured');
+    }
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(
+        () => reject(new Error('Cloudinary upload timeout')),
+        60000,
+      );
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: 'nerdified/courses',
+          public_id: `${Date.now()}_${(file.originalname || 'course').replace(/\.[^/.]+$/, '')}`,
+          resource_type: 'image',
+        },
+        (error, result) => {
+          clearTimeout(timeout);
+          if (error) reject(new Error(error.message || 'Cloudinary upload failed'));
+          else if (!result) reject(new Error('Cloudinary upload failed'));
+          else resolve(result);
+        },
+      );
+      const bufferStream = new Readable();
+      bufferStream.push(file.buffer);
+      bufferStream.push(null);
+      bufferStream.pipe(uploadStream);
+    });
+  }
+
+  private async deleteCourseImageFromCloudinary(publicId: string): Promise<void> {
+    try {
+      const result = await cloudinary.uploader.destroy(publicId, { resource_type: 'image' });
+      if (result.result !== 'ok') {
+        console.warn('Cloudinary delete result:', result.result);
+      }
+    } catch (e) {
+      console.warn('Failed to delete old course image from Cloudinary:', e);
+    }
+  }
+
+  /** Extract Cloudinary public_id from course image URL (path after upload/version). */
+  private extractCourseImagePublicId(url: string): string {
+    const segments = url.split('/');
+    const uploadIdx = segments.indexOf('upload');
+    if (uploadIdx === -1 || segments.length < uploadIdx + 3) return '';
+    const pathAfterVersion = segments.slice(uploadIdx + 2).join('/');
+    return pathAfterVersion.replace(/\.[^/.]+$/, '');
+  }
+
   async deleteCourse(id: number): Promise<Course | undefined> {
     const course = await this.prisma.course.findUnique({ where: { id } });
     if (!course) return undefined;
@@ -380,6 +460,7 @@ export class CoursesService {
         tutorId,
         title: newTitle,
         description: course.description,
+        imagePath: course.imagePath,
         price: course.price,
         priceOneOnOne: course.priceOneOnOne,
         courseType: course.courseType,
