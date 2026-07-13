@@ -182,6 +182,6 @@ export class AuthController {
   @UseGuards(AtGuard)
   @Get('me')
   async me(@GetCurrentUser() user: JwtPayload) {
-    return { email: user.email, role: user.role };
+    return { id: user.sub, email: user.email, role: user.role };
   }
 }

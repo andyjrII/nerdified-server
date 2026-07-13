@@ -135,7 +135,13 @@ export class MessagesController {
   @HttpCode(HttpStatus.OK)
   async getCourseChatMessages(
     @Param('courseId', ParseIntPipe) courseId: number,
+    @GetCurrentUserId() userId: number,
+    @Query('userType') userType: SENDERTYPE,
   ): Promise<CourseChatMessage[]> {
-    return await this.messagesService.getCourseChatMessages(courseId);
+    return await this.messagesService.getCourseChatMessages(
+      courseId,
+      userId,
+      userType,
+    );
   }
 }

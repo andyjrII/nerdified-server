@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -285,21 +286,64 @@ export class MessagesService {
   }
 
   // Course Chat Messages
+
+  /**
+   * Course chat is only for the course's tutor and its enrolled students.
+   * Throws NotFound/Forbidden otherwise.
+   */
+  private async assertCourseMember(
+    courseId: number,
+    userId: number,
+    userType: 'STUDENT' | 'TUTOR',
+  ): Promise<void> {
+    const course = await this.prisma.course.findUnique({
+      where: { id: courseId },
+      select: { tutorId: true },
+    });
+    if (!course) throw new NotFoundException('Course not found');
+
+    if (userType === 'TUTOR') {
+      if (course.tutorId !== userId)
+        throw new ForbiddenException('You are not the tutor of this course');
+      return;
+    }
+    const enrollment = await this.prisma.courseEnrollment.findFirst({
+      where: {
+        courseId,
+        studentId: userId,
+        status: { in: ['STARTED', 'FINISHED'] },
+      },
+      select: { id: true },
+    });
+    if (!enrollment)
+      throw new ForbiddenException('You are not enrolled in this course');
+  }
+
+  private async senderName(
+    senderId: number,
+    senderType: 'STUDENT' | 'TUTOR',
+  ): Promise<string | null> {
+    const record =
+      senderType === 'TUTOR'
+        ? await this.prisma.tutor.findUnique({
+            where: { id: senderId },
+            select: { name: true },
+          })
+        : await this.prisma.student.findUnique({
+            where: { id: senderId },
+            select: { name: true },
+          });
+    return record?.name ?? null;
+  }
+
   async sendCourseChatMessage(
     courseId: number,
     senderId: number,
     senderType: 'STUDENT' | 'TUTOR',
     message: string,
     isAnnouncement: boolean = false,
-  ): Promise<CourseChatMessage> {
-    // Validate course exists
-    const course = await this.prisma.course.findUnique({
-      where: { id: courseId },
-    });
-
-    if (!course) {
-      throw new NotFoundException('Course not found');
-    }
+  ): Promise<CourseChatMessage & { senderName: string | null }> {
+    await this.assertCourseMember(courseId, senderId, senderType);
 
     // Only tutors can send announcements
     if (isAnnouncement && senderType !== 'TUTOR') {
@@ -315,13 +359,23 @@ export class MessagesService {
         isAnnouncement,
       },
     });
+    const enriched = {
+      ...created,
+      senderName: await this.senderName(senderId, senderType),
+    };
     // Deliver in real time to everyone in the course chat room.
-    this.gateway.emitCourseMessage(created);
-    return created;
+    this.gateway.emitCourseMessage(enriched);
+    return enriched;
   }
 
-  async getCourseChatMessages(courseId: number): Promise<CourseChatMessage[]> {
-    return await this.prisma.courseChatMessage.findMany({
+  async getCourseChatMessages(
+    courseId: number,
+    userId: number,
+    userType: 'STUDENT' | 'TUTOR',
+  ): Promise<Array<CourseChatMessage & { senderName: string | null }>> {
+    await this.assertCourseMember(courseId, userId, userType);
+
+    const messages = await this.prisma.courseChatMessage.findMany({
       where: {
         courseId,
       },
@@ -329,5 +383,39 @@ export class MessagesService {
         createdAt: 'asc',
       },
     });
+
+    // Resolve sender names in one query per sender type.
+    const studentIds = [
+      ...new Set(
+        messages.filter((m) => m.senderType === 'STUDENT').map((m) => m.senderId),
+      ),
+    ];
+    const tutorIds = [
+      ...new Set(
+        messages.filter((m) => m.senderType === 'TUTOR').map((m) => m.senderId),
+      ),
+    ];
+    const [students, tutors] = await Promise.all([
+      studentIds.length
+        ? this.prisma.student.findMany({
+            where: { id: { in: studentIds } },
+            select: { id: true, name: true },
+          })
+        : [],
+      tutorIds.length
+        ? this.prisma.tutor.findMany({
+            where: { id: { in: tutorIds } },
+            select: { id: true, name: true },
+          })
+        : [],
+    ]);
+    const names = new Map<string, string | null>();
+    for (const s of students) names.set(`STUDENT:${s.id}`, s.name);
+    for (const t of tutors) names.set(`TUTOR:${t.id}`, t.name);
+
+    return messages.map((m) => ({
+      ...m,
+      senderName: names.get(`${m.senderType}:${m.senderId}`) ?? null,
+    }));
   }
 }
