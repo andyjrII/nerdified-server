@@ -15,6 +15,13 @@ import { Student, Tutor, UserRole } from '@prisma/client';
 import { StudentsService } from '../students/students.service';
 import { TutorsService } from '../tutors/tutors.service';
 import { TutorSignupDto } from './dto/tutor-signup.dto';
+import { MailService } from '../mail/mail.service';
+
+/** First configured frontend origin, for links in emails. */
+function frontendBaseUrl(): string {
+  const first = process.env.FRONTEND_BASE_URL?.split(',')[0]?.trim();
+  return first || 'http://localhost:3101';
+}
 
 @Injectable()
 export class AuthService {
@@ -23,7 +30,127 @@ export class AuthService {
     private jwtService: JwtService,
     private studentsService: StudentsService,
     private tutorsService: TutorsService,
+    private mail: MailService,
   ) {}
+
+  // ---------- Email verification ----------
+
+  /**
+   * Sends a verification email with a 3-day signed-JWT link (stateless — no
+   * token table). Best-effort: failures are logged by MailService, never thrown.
+   */
+  async sendVerificationEmail(
+    userId: number,
+    email: string,
+    name: string | null,
+    role: 'STUDENT' | 'TUTOR',
+  ): Promise<void> {
+    const token = await this.jwtService.signAsync(
+      { sub: userId, email, role, typ: 'email_verify' },
+      { secret: process.env.AT_SECRET_KEY, expiresIn: '3d' },
+    );
+    const link = `${frontendBaseUrl()}/verify-email?token=${token}`;
+    void this.mail.sendEmail({
+      to: email,
+      toName: name ?? undefined,
+      subject: 'Verify your email address',
+      html: this.mail.layout(
+        'Verify your email',
+        `<p>Hi ${name ?? 'there'},</p><p>Please confirm this email address for your Nerdified account. The link is valid for 3 days.</p>`,
+        link,
+        'Verify my email',
+      ),
+    });
+  }
+
+  /** Consumes a verification token and marks the account's email verified. */
+  async verifyEmail(
+    token: string,
+  ): Promise<{ verified: boolean; email: string; role: string }> {
+    let payload: { sub: number; email: string; role: string; typ: string };
+    try {
+      payload = await this.jwtService.verifyAsync(token, {
+        secret: process.env.AT_SECRET_KEY,
+      });
+    } catch {
+      throw new BadRequestException('Verification link is invalid or expired');
+    }
+    if (
+      payload.typ !== 'email_verify' ||
+      (payload.role !== 'STUDENT' && payload.role !== 'TUTOR')
+    ) {
+      throw new BadRequestException('Verification link is invalid or expired');
+    }
+
+    const where = { id: payload.sub, email: payload.email };
+    if (payload.role === 'STUDENT') {
+      const updated = await this.prisma.student.updateMany({
+        where: { ...where, emailVerifiedAt: null },
+        data: { emailVerifiedAt: new Date() },
+      });
+      // Zero rows means either already verified (fine) or no such account.
+      if (updated.count === 0) {
+        const exists = await this.prisma.student.findFirst({ where });
+        if (!exists)
+          throw new BadRequestException('Verification link is invalid or expired');
+      }
+    } else {
+      const updated = await this.prisma.tutor.updateMany({
+        where: { ...where, emailVerifiedAt: null },
+        data: { emailVerifiedAt: new Date() },
+      });
+      if (updated.count === 0) {
+        const exists = await this.prisma.tutor.findFirst({ where });
+        if (!exists)
+          throw new BadRequestException('Verification link is invalid or expired');
+      }
+    }
+    return { verified: true, email: payload.email, role: payload.role };
+  }
+
+  /** Re-sends the verification email for the authenticated user. */
+  async resendVerification(
+    userId: number,
+    role: UserRole,
+  ): Promise<{ message: string }> {
+    const r = String(role).toUpperCase();
+    if (r !== 'STUDENT' && r !== 'TUTOR') {
+      return { message: 'Nothing to verify' };
+    }
+    const account =
+      r === 'STUDENT'
+        ? await this.prisma.student.findUnique({ where: { id: userId } })
+        : await this.prisma.tutor.findUnique({ where: { id: userId } });
+    if (!account) throw new UnauthorizedException('Access Denied!');
+    if (account.emailVerifiedAt) return { message: 'Email already verified' };
+    await this.sendVerificationEmail(
+      account.id,
+      account.email,
+      account.name,
+      r as 'STUDENT' | 'TUTOR',
+    );
+    return { message: 'Verification email sent' };
+  }
+
+  /** Whether the user's email is verified (admins are implicitly verified). */
+  async isEmailVerified(userId: number, role: UserRole): Promise<boolean> {
+    const r = String(role).toUpperCase();
+    if (r === 'STUDENT') {
+      const s = await this.prisma.student.findUnique({
+        where: { id: userId },
+        select: { emailVerifiedAt: true },
+      });
+      return !!s?.emailVerifiedAt;
+    }
+    if (r === 'TUTOR') {
+      const t = await this.prisma.tutor.findUnique({
+        where: { id: userId },
+        select: { emailVerifiedAt: true },
+      });
+      return !!t?.emailVerifiedAt;
+    }
+    return true;
+  }
 
   async signup(dto: SignupDto, image: Express.Multer.File): Promise<Tokens> {
     // check if student with the email already exists
@@ -67,6 +194,12 @@ export class AuthService {
       'STUDENT',
     );
     await this.updateRT(newStudent.id, tokens.refresh_token, 'STUDENT');
+    await this.sendVerificationEmail(
+      newStudent.id,
+      newStudent.email,
+      newStudent.name,
+      'STUDENT',
+    );
     return tokens;
   }
 
@@ -92,7 +225,14 @@ export class AuthService {
             name: profile.name,
             address: '',
             imagePath: profile.picture,
+            emailVerifiedAt: new Date(), // Google email is verified
           },
+        });
+      } else if (!student.emailVerifiedAt) {
+        // Signing in via Google proves ownership of this email.
+        await this.prisma.student.update({
+          where: { id: student.id },
+          data: { emailVerifiedAt: new Date() },
         });
       }
       const tokens = await this.getTokens(student.id, student.email, 'STUDENT');
@@ -111,7 +251,14 @@ export class AuthService {
           password,
           name: profile.name,
           imagePath: profile.picture,
+          emailVerifiedAt: new Date(), // Google email is verified
         },
+      });
+    } else if (!tutor.emailVerifiedAt) {
+      // Signing in via Google proves ownership of this email.
+      await this.prisma.tutor.update({
+        where: { id: tutor.id },
+        data: { emailVerifiedAt: new Date() },
       });
     }
     const tokens = await this.getTokens(tutor.id, tutor.email, 'TUTOR');
@@ -423,6 +570,12 @@ export class AuthService {
     });
     const tokens = await this.getTokens(newTutor.id, newTutor.email, 'TUTOR');
     await this.updateRT(newTutor.id, tokens.refresh_token, 'TUTOR');
+    await this.sendVerificationEmail(
+      newTutor.id,
+      newTutor.email,
+      newTutor.name,
+      'TUTOR',
+    );
     return tokens;
   }
 }

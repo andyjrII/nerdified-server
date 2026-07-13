@@ -17,6 +17,7 @@ model Student {
   phoneNumber  String?            @unique
   password     String
   refreshToken String?
+  emailVerifiedAt DateTime?       // When the email address was verified (null = unverified)
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
   imagePath    String?
@@ -40,6 +41,7 @@ model Tutor {
   phoneNumber        String?              @unique
   password           String
   refreshToken       String?
+  emailVerifiedAt    DateTime?            // When the email address was verified (null = unverified)
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
   imagePath          String?

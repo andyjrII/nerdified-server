@@ -191,6 +191,26 @@ export class AuthController {
     return { email: dto.email, role: 'TUTOR' };
   }
 
+  // ---------- Email verification ----------
+
+  /** Consumes a verification link token (called by the /verify-email page). */
+  @Public()
+  @Get('verify-email')
+  @HttpCode(HttpStatus.OK)
+  async verifyEmail(@Query('token') token: string) {
+    if (!token) throw new BadRequestException('Missing token');
+    return await this.authService.verifyEmail(token);
+  }
+
+  /** Re-sends the verification email for the signed-in user. */
+  @UseGuards(AtGuard)
+  @Post('verify-email/resend')
+  @HttpCode(HttpStatus.OK)
+  async resendVerification(@GetCurrentUser() user: JwtPayload) {
+    const id = typeof user.sub === 'number' ? user.sub : Number(user.sub);
+    return await this.authService.resendVerification(id, user.role);
+  }
+
   // ---------- Google OAuth ----------
 
   /**
@@ -266,6 +286,8 @@ export class AuthController {
   @UseGuards(AtGuard)
   @Get('me')
   async me(@GetCurrentUser() user: JwtPayload) {
-    return { id: user.sub, email: user.email, role: user.role };
+    const id = typeof user.sub === 'number' ? user.sub : Number(user.sub);
+    const emailVerified = await this.authService.isEmailVerified(id, user.role);
+    return { id: user.sub, email: user.email, role: user.role, emailVerified };
   }
 }
