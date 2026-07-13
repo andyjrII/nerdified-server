@@ -25,6 +25,9 @@ import {
   saveImageToStorage,
 } from '../common/helpers/image.storage';
 import { AtGuard } from '../common/guards/at.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { UserRole } from '@prisma/client';
 import { join } from 'path';
 import { Public } from '../common/decorators/public.decorator';
 
@@ -45,7 +48,8 @@ export class StudentsController {
   /*
    * Allows a Student enroll for a Course
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.STUDENT)
   @Post('enroll')
   @HttpCode(HttpStatus.CREATED)
   async courseEnrollment(
@@ -163,7 +167,8 @@ export class StudentsController {
   /*
    * Returns all Students using pagination, search & level as filters
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.SUB_ADMIN)
   @Get('search/:page')
   @HttpCode(HttpStatus.OK)
   async getStudents(
@@ -176,7 +181,8 @@ export class StudentsController {
   /*
    * Deletes a Student & his/her image using id
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.SUB_ADMIN)
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   async deleteStudent(

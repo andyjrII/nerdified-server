@@ -10,11 +10,18 @@ import {
 } from '@nestjs/common';
 import { TutorsService } from './tutors.service';
 import { AtGuard } from '../common/guards/at.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
 import { GetCurrentUserId } from '../common/decorators/get-current-userId.decorator';
-import { Tutor } from '@prisma/client';
+import { Tutor, UserRole } from '@prisma/client';
 import { UpdateTimezoneDto } from './dto/update-timezone.dto';
 import { UpdateBankDto } from './dto/update-bank.dto';
 
+// Every tutor route is scoped to the authenticated tutor (identity from the
+// JWT), so the whole controller is TUTOR-only. Admin tutor management lives
+// under the separate /admin/tutors routes.
+@UseGuards(AtGuard, RolesGuard)
+@Roles(UserRole.TUTOR)
 @Controller('tutors')
 export class TutorsController {
   constructor(private readonly tutorsService: TutorsService) {}
@@ -22,7 +29,6 @@ export class TutorsController {
   /*
    * Get tutor profile by email
    */
-  @UseGuards(AtGuard)
   @Get()
   @HttpCode(HttpStatus.OK)
   async getTutor(@Query('email') email: string): Promise<Tutor | undefined> {
@@ -32,7 +38,6 @@ export class TutorsController {
   /*
    * Get current tutor profile (from JWT)
    */
-  @UseGuards(AtGuard)
   @Get('me')
   @HttpCode(HttpStatus.OK)
   async getCurrentTutor(
@@ -44,7 +49,6 @@ export class TutorsController {
   /*
    * Update current tutor timezone (for scheduling and availability)
    */
-  @UseGuards(AtGuard)
   @Patch('me')
   @HttpCode(HttpStatus.OK)
   async updateMyProfile(
@@ -60,7 +64,6 @@ export class TutorsController {
   /*
    * Get earnings summary for current tutor
    */
-  @UseGuards(AtGuard)
   @Get('me/earnings')
   @HttpCode(HttpStatus.OK)
   async getMyEarnings(@GetCurrentUserId() tutorId: number) {
@@ -70,7 +73,6 @@ export class TutorsController {
   /*
    * Get students enrolled in current tutor's courses
    */
-  @UseGuards(AtGuard)
   @Get('me/students')
   @HttpCode(HttpStatus.OK)
   async getMyStudents(@GetCurrentUserId() tutorId: number) {
@@ -80,7 +82,6 @@ export class TutorsController {
   /*
    * List banks (name + code) for the payout bank picker
    */
-  @UseGuards(AtGuard)
   @Get('banks')
   @HttpCode(HttpStatus.OK)
   async getBanks() {
@@ -90,7 +91,6 @@ export class TutorsController {
   /*
    * Get current tutor's payout bank details
    */
-  @UseGuards(AtGuard)
   @Get('me/bank')
   @HttpCode(HttpStatus.OK)
   async getMyBank(@GetCurrentUserId() id: number) {
@@ -100,7 +100,6 @@ export class TutorsController {
   /*
    * Set current tutor's payout bank account (verified + recipient created)
    */
-  @UseGuards(AtGuard)
   @Patch('me/bank')
   @HttpCode(HttpStatus.OK)
   async updateMyBank(

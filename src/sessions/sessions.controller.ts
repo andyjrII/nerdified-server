@@ -13,6 +13,8 @@ import {
 } from '@nestjs/common';
 import { SessionsService } from './sessions.service';
 import { AtGuard } from '../common/guards/at.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
 import { GetCurrentUserId } from '../common/decorators/get-current-userId.decorator';
 import { GetCurrentUser } from '../common/decorators/get-current-user.decorator';
 import { JwtPayload } from '../auth/strategies/at.strategy';
@@ -26,6 +28,7 @@ import {
   Session,
   TutorAvailability,
   SessionBooking,
+  UserRole,
 } from '@prisma/client';
 
 @Controller('sessions')
@@ -35,7 +38,8 @@ export class SessionsController {
   /*
    * Create tutor availability (Tutor only)
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.TUTOR)
   @Post('availability')
   @HttpCode(HttpStatus.CREATED)
   async createAvailability(
@@ -53,7 +57,8 @@ export class SessionsController {
   /*
    * Get tutor availability
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.TUTOR)
   @Get('availability')
   @HttpCode(HttpStatus.OK)
   async getTutorAvailability(
@@ -65,7 +70,8 @@ export class SessionsController {
   /*
    * Create a session (Tutor only)
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.TUTOR)
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async createSession(
@@ -86,7 +92,8 @@ export class SessionsController {
    * Create a 1:1 session for an enrolled student (Tutor only).
    * Tutor and student agree on times via chat; tutor creates the session here.
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.TUTOR)
   @Post('one-on-one')
   @HttpCode(HttpStatus.CREATED)
   async createOneOnOneSession(
@@ -106,7 +113,8 @@ export class SessionsController {
   /*
    * Duplicate a session with new start/end times (Tutor only). Copies title, description, and type.
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.TUTOR)
   @Post(':sessionId/duplicate')
   @HttpCode(HttpStatus.CREATED)
   async duplicateSession(
@@ -136,7 +144,8 @@ export class SessionsController {
   /*
    * Get sessions by tutor (Tutor only - from JWT)
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.TUTOR)
   @Get('tutor')
   @HttpCode(HttpStatus.OK)
   async getSessionsByTutor(
@@ -148,7 +157,8 @@ export class SessionsController {
   /*
    * Create reschedule request (Tutor only)
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.TUTOR)
   @Post('reschedule-requests')
   @HttpCode(HttpStatus.CREATED)
   async createRescheduleRequest(
@@ -167,7 +177,8 @@ export class SessionsController {
   /*
    * Create add-session request (Tutor only)
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.TUTOR)
   @Post('add-session-requests')
   @HttpCode(HttpStatus.CREATED)
   async createAddSessionRequest(
@@ -188,7 +199,8 @@ export class SessionsController {
   /*
    * Get tutor's reschedule requests (Tutor only)
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.TUTOR)
   @Get('reschedule-requests')
   @HttpCode(HttpStatus.OK)
   async getRescheduleRequestsForTutor(@GetCurrentUserId() tutorId: number) {
@@ -198,7 +210,8 @@ export class SessionsController {
   /*
    * Get tutor's add-session requests (Tutor only)
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.TUTOR)
   @Get('add-session-requests')
   @HttpCode(HttpStatus.OK)
   async getAddSessionRequestsForTutor(@GetCurrentUserId() tutorId: number) {
@@ -209,7 +222,8 @@ export class SessionsController {
    * Get suggested time slots for creating a session (Tutor only)
    * Query: courseId, from (ISO date), to (ISO date), durationMinutes (optional, default 60)
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.TUTOR)
   @Get('suggested-slots')
   @HttpCode(HttpStatus.OK)
   async getSuggestedSlots(
@@ -237,7 +251,8 @@ export class SessionsController {
   /*
    * Book a session (Student only)
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.STUDENT)
   @Post(':sessionId/book')
   @HttpCode(HttpStatus.CREATED)
   async bookSession(
@@ -250,7 +265,8 @@ export class SessionsController {
   /*
    * Get student bookings (Student only)
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.STUDENT)
   @Get('bookings')
   @HttpCode(HttpStatus.OK)
   async getStudentBookings(
@@ -262,7 +278,8 @@ export class SessionsController {
   /*
    * Cancel a booking (Student only)
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.STUDENT)
   @Delete('bookings/:bookingId')
   @HttpCode(HttpStatus.OK)
   async cancelBooking(
@@ -275,7 +292,8 @@ export class SessionsController {
   /*
    * Cancel a session (Tutor only)
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.TUTOR)
   @Delete(':sessionId')
   @HttpCode(HttpStatus.OK)
   async cancelSession(
@@ -288,7 +306,8 @@ export class SessionsController {
   /*
    * Delete tutor availability (Tutor only)
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.TUTOR)
   @Delete('availability/:availabilityId')
   @HttpCode(HttpStatus.OK)
   async deleteAvailability(
@@ -304,7 +323,7 @@ export class SessionsController {
   /*
    * Generate a LiveKit token to join a live session (Tutor or booked Student)
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
   @Post(':sessionId/livekit-token')
   @HttpCode(HttpStatus.OK)
   async getLivekitToken(
@@ -317,7 +336,8 @@ export class SessionsController {
   /*
    * Start recording a live session (tutor who owns the session only)
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.TUTOR)
   @Post(':sessionId/recording/start')
   @HttpCode(HttpStatus.OK)
   async startRecording(
@@ -334,7 +354,8 @@ export class SessionsController {
   /*
    * Stop the active recording and store the recording URL on the session
    */
-  @UseGuards(AtGuard)
+  @UseGuards(AtGuard, RolesGuard)
+  @Roles(UserRole.TUTOR)
   @Post(':sessionId/recording/stop')
   @HttpCode(HttpStatus.OK)
   async stopRecording(
