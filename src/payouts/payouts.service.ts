@@ -1,12 +1,14 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { PAYOUTSTATUS, TutorPayout } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MailService } from '../mail/mail.service';
+import { PaystackService } from '../payments/paystack.service';
 import { formatCurrency } from '../common/utils/formatCurrency';
 
 const PAGE_SIZE = 20;
@@ -26,11 +28,38 @@ export interface TutorBalance {
 
 @Injectable()
 export class PayoutsService {
+  private readonly logger = new Logger(PayoutsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly mail: MailService,
+    private readonly paystack: PaystackService,
   ) {}
+
+  /** In-app notification for a terminal payout status. */
+  private async notifyPayoutStatus(
+    tutorId: number,
+    status: 'COMPLETED' | 'FAILED',
+    netAmount: number,
+  ): Promise<void> {
+    if (status === 'COMPLETED') {
+      await this.notifications.notifyTutor(tutorId, {
+        type: 'PAYMENT',
+        title: 'Payout completed',
+        message: `${formatCurrency(netAmount)} has been paid out to you.`,
+        link: '/tutor/earnings',
+      });
+    } else {
+      await this.notifications.notifyTutor(tutorId, {
+        type: 'PAYMENT',
+        title: 'Payout failed',
+        message:
+          'A payout attempt failed. Our team will retry — no action needed.',
+        link: '/tutor/earnings',
+      });
+    }
+  }
 
   /** Platform commission as a fraction (0–1). Configurable via env. */
   getCommissionRate(): number {
@@ -169,24 +198,167 @@ export class PayoutsService {
       },
     });
 
-    if (status === 'COMPLETED') {
-      await this.notifications.notifyTutor(existing.tutorId, {
-        type: 'PAYMENT',
-        title: 'Payout completed',
-        message: `${formatCurrency(Number(payout.netAmount))} has been paid out to you.`,
-        link: '/tutor/earnings',
-      });
-    } else if (status === 'FAILED') {
-      await this.notifications.notifyTutor(existing.tutorId, {
-        type: 'PAYMENT',
-        title: 'Payout failed',
-        message:
-          'A payout attempt failed. Our team will retry — no action needed.',
-        link: '/tutor/earnings',
-      });
+    if (status === 'COMPLETED' || status === 'FAILED') {
+      await this.notifyPayoutStatus(
+        existing.tutorId,
+        status,
+        Number(payout.netAmount),
+      );
     }
 
     return payout;
+  }
+
+  /**
+   * Actually disburses a payout via Paystack Transfers. Allowed from PENDING or
+   * FAILED (retry). Initiates the transfer to the tutor's saved recipient and
+   * moves the payout to PROCESSING (or COMPLETED if Paystack settles instantly).
+   * Final confirmation for async transfers arrives via the webhook.
+   */
+  async disburse(payoutId: number): Promise<TutorPayout> {
+    if (!this.paystack.transfersConfigured()) {
+      throw new BadRequestException(
+        'Payouts are not configured (set PAYSTACK_SECRET_KEY to enable transfers)',
+      );
+    }
+    const payout = await this.prisma.tutorPayout.findUnique({
+      where: { id: payoutId },
+    });
+    if (!payout) throw new NotFoundException('Payout not found');
+    if (payout.status === 'COMPLETED') {
+      throw new BadRequestException('This payout has already been paid out');
+    }
+    if (payout.status === 'PROCESSING') {
+      throw new BadRequestException('A transfer for this payout is in progress');
+    }
+
+    const tutor = await this.prisma.tutor.findUnique({
+      where: { id: payout.tutorId },
+    });
+    if (!tutor?.paystackRecipientCode) {
+      throw new BadRequestException(
+        'This tutor has not set up a payout bank account yet',
+      );
+    }
+
+    // Fresh reference each attempt so retries are not rejected as duplicates.
+    const reference = `nerdified-payout-${payout.id}-${Date.now()}`;
+    let result;
+    try {
+      result = await this.paystack.initiateTransfer({
+        amountNaira: Number(payout.netAmount),
+        recipientCode: tutor.paystackRecipientCode,
+        reference,
+        reason: `Nerdified payout #${payout.id}`,
+      });
+    } catch (err) {
+      this.logger.error(
+        `Transfer initiation failed for payout ${payout.id}`,
+        err as Error,
+      );
+      await this.prisma.tutorPayout.update({
+        where: { id: payout.id },
+        data: {
+          status: 'FAILED',
+          failureReason: (err as Error).message ?? 'Transfer initiation failed',
+        },
+      });
+      await this.notifyPayoutStatus(
+        payout.tutorId,
+        'FAILED',
+        Number(payout.netAmount),
+      );
+      throw new BadRequestException(
+        'Could not initiate the transfer with the payment provider',
+      );
+    }
+
+    const status: PAYOUTSTATUS =
+      result.status === 'success'
+        ? 'COMPLETED'
+        : result.status === 'failed'
+          ? 'FAILED'
+          : 'PROCESSING';
+
+    const updated = await this.prisma.tutorPayout.update({
+      where: { id: payout.id },
+      data: {
+        status,
+        transferCode: result.transferCode || null,
+        paymentReference: result.reference,
+        paidAt: status === 'COMPLETED' ? new Date() : null,
+        failureReason: status === 'FAILED' ? 'Transfer rejected' : null,
+      },
+    });
+
+    if (status === 'PROCESSING') {
+      await this.notifications.notifyTutor(payout.tutorId, {
+        type: 'PAYMENT',
+        title: 'Payout on the way',
+        message: `A payout of ${formatCurrency(Number(payout.netAmount))} is being transferred to your bank.`,
+        link: '/tutor/earnings',
+      });
+    } else {
+      await this.notifyPayoutStatus(
+        payout.tutorId,
+        status as 'COMPLETED' | 'FAILED',
+        Number(payout.netAmount),
+      );
+    }
+    return updated;
+  }
+
+  /**
+   * Finalizes a payout from a Paystack transfer webhook event. Idempotent:
+   * only acts when the status actually changes. Signature must be verified by
+   * the caller before this runs.
+   */
+  async handleTransferWebhook(event: {
+    event?: string;
+    data?: { transfer_code?: string; reference?: string; reason?: string };
+  }): Promise<void> {
+    const type = event?.event;
+    const transferCode = event?.data?.transfer_code;
+    const reference = event?.data?.reference;
+    if (!type || (!transferCode && !reference)) return;
+
+    const payout = await this.prisma.tutorPayout.findFirst({
+      where: {
+        OR: [
+          ...(transferCode ? [{ transferCode }] : []),
+          ...(reference ? [{ paymentReference: reference }] : []),
+        ],
+      },
+    });
+    if (!payout) return;
+
+    if (type === 'transfer.success' && payout.status !== 'COMPLETED') {
+      await this.prisma.tutorPayout.update({
+        where: { id: payout.id },
+        data: { status: 'COMPLETED', paidAt: new Date(), failureReason: null },
+      });
+      await this.notifyPayoutStatus(
+        payout.tutorId,
+        'COMPLETED',
+        Number(payout.netAmount),
+      );
+    } else if (
+      (type === 'transfer.failed' || type === 'transfer.reversed') &&
+      payout.status !== 'FAILED'
+    ) {
+      await this.prisma.tutorPayout.update({
+        where: { id: payout.id },
+        data: {
+          status: 'FAILED',
+          failureReason: event.data?.reason ?? type,
+        },
+      });
+      await this.notifyPayoutStatus(
+        payout.tutorId,
+        'FAILED',
+        Number(payout.netAmount),
+      );
+    }
   }
 
   async listPayouts(opts: {

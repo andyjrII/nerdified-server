@@ -5,13 +5,105 @@ import {
 } from '@nestjs/common';
 import { Tutor } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PaystackService, PaystackBank } from '../payments/paystack.service';
 import { UploadApiResponse } from 'cloudinary';
 import { cloudinary } from '../cloudinary/cloudinary.provider';
 import { Readable } from 'stream';
 
+export interface TutorBankDetails {
+  bankName: string | null;
+  bankCode: string | null;
+  bankAccountNumber: string | null;
+  bankAccountName: string | null;
+  hasRecipient: boolean;
+}
+
 @Injectable()
 export class TutorsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly paystack: PaystackService,
+  ) {}
+
+  /** Nigerian bank list (name + Paystack code) for the payout bank picker. */
+  async listBanks(): Promise<PaystackBank[]> {
+    if (!this.paystack.transfersConfigured()) return [];
+    return this.paystack.listBanks();
+  }
+
+  /** The tutor's saved payout bank details (no secrets). */
+  async getBankDetails(id: number): Promise<TutorBankDetails> {
+    const tutor = await this.prisma.tutor.findUnique({
+      where: { id },
+      select: {
+        bankName: true,
+        bankCode: true,
+        bankAccountNumber: true,
+        bankAccountName: true,
+        paystackRecipientCode: true,
+      },
+    });
+    if (!tutor) throw new NotFoundException('Tutor not found!');
+    return {
+      bankName: tutor.bankName,
+      bankCode: tutor.bankCode,
+      bankAccountNumber: tutor.bankAccountNumber,
+      bankAccountName: tutor.bankAccountName,
+      hasRecipient: !!tutor.paystackRecipientCode,
+    };
+  }
+
+  /**
+   * Saves a tutor's payout bank account. Verifies the account with Paystack
+   * (resolving the holder's name) and creates a transfer recipient so payouts
+   * can be disbursed later.
+   */
+  async updateBankDetails(
+    id: number,
+    dto: { bankName: string; bankCode: string; accountNumber: string },
+  ): Promise<TutorBankDetails> {
+    if (!this.paystack.transfersConfigured()) {
+      throw new BadRequestException(
+        'Payouts are not configured on the server yet. Please try again later.',
+      );
+    }
+    const tutor = await this.prisma.tutor.findUnique({ where: { id } });
+    if (!tutor) throw new NotFoundException('Tutor not found!');
+
+    const resolved = await this.paystack.resolveAccount(
+      dto.accountNumber,
+      dto.bankCode,
+    );
+    if (!resolved) {
+      throw new BadRequestException(
+        'Could not verify that bank account. Please check the account number and bank.',
+      );
+    }
+
+    const recipientCode = await this.paystack.createTransferRecipient({
+      name: resolved.accountName,
+      accountNumber: dto.accountNumber,
+      bankCode: dto.bankCode,
+    });
+
+    await this.prisma.tutor.update({
+      where: { id },
+      data: {
+        bankName: dto.bankName,
+        bankCode: dto.bankCode,
+        bankAccountNumber: dto.accountNumber,
+        bankAccountName: resolved.accountName,
+        paystackRecipientCode: recipientCode,
+      },
+    });
+    return {
+      bankName: dto.bankName,
+      bankCode: dto.bankCode,
+      bankAccountNumber: dto.accountNumber,
+      bankAccountName: resolved.accountName,
+      hasRecipient: true,
+    };
+  }
 
   async getTutor(email: string): Promise<Tutor | undefined> {
     const tutor = await this.prisma.tutor.findUnique({

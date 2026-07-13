@@ -52,6 +52,12 @@ model Tutor {
   approvedBy         Admin?               @relation(fields: [approvedById], references: [id])
   approvedById       Int?
   timezone           String?              // IANA timezone e.g. "America/New_York" for availability & display
+  // Payout bank details (for Paystack Transfers)
+  bankName              String?
+  bankCode              String?           // Paystack bank code
+  bankAccountNumber     String?
+  bankAccountName       String?           // Resolved account holder name from Paystack
+  paystackRecipientCode String?           // Cached Paystack transfer recipient code
   courses            Course[]
   availability       TutorAvailability[]
   sessions           Session[]
@@ -256,7 +262,9 @@ model TutorPayout {
   commission      Decimal          @db.Decimal(10, 2) // Platform commission
   netAmount       Decimal          @db.Decimal(10, 2) // Amount after commission
   status          PAYOUTSTATUS     @default(PENDING)
-  paymentReference String?
+  paymentReference String?         // Paystack transfer reference (idempotency key)
+  transferCode    String?          // Paystack transfer_code (for status/finalize)
+  failureReason   String?          // Reason when a transfer fails/reverses
   paidAt          DateTime?
   createdAt       DateTime         @default(now())
 

@@ -4,7 +4,9 @@ import { AppModule } from './app.module';
 import * as cookieParser from 'cookie-parser';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // rawBody: true captures the raw request body so webhook signatures
+  // (e.g. Paystack transfer events) can be verified against it.
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   app.use(cookieParser());
   const fromEnv = process.env.FRONTEND_BASE_URL
     ? process.env.FRONTEND_BASE_URL.split(',').map((u) => u.trim())

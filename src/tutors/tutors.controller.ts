@@ -13,6 +13,7 @@ import { AtGuard } from '../common/guards/at.guard';
 import { GetCurrentUserId } from '../common/decorators/get-current-userId.decorator';
 import { Tutor } from '@prisma/client';
 import { UpdateTimezoneDto } from './dto/update-timezone.dto';
+import { UpdateBankDto } from './dto/update-bank.dto';
 
 @Controller('tutors')
 export class TutorsController {
@@ -74,5 +75,38 @@ export class TutorsController {
   @HttpCode(HttpStatus.OK)
   async getMyStudents(@GetCurrentUserId() tutorId: number) {
     return await this.tutorsService.getStudents(tutorId);
+  }
+
+  /*
+   * List banks (name + code) for the payout bank picker
+   */
+  @UseGuards(AtGuard)
+  @Get('banks')
+  @HttpCode(HttpStatus.OK)
+  async getBanks() {
+    return await this.tutorsService.listBanks();
+  }
+
+  /*
+   * Get current tutor's payout bank details
+   */
+  @UseGuards(AtGuard)
+  @Get('me/bank')
+  @HttpCode(HttpStatus.OK)
+  async getMyBank(@GetCurrentUserId() id: number) {
+    return await this.tutorsService.getBankDetails(id);
+  }
+
+  /*
+   * Set current tutor's payout bank account (verified + recipient created)
+   */
+  @UseGuards(AtGuard)
+  @Patch('me/bank')
+  @HttpCode(HttpStatus.OK)
+  async updateMyBank(
+    @GetCurrentUserId() id: number,
+    @Body() dto: UpdateBankDto,
+  ) {
+    return await this.tutorsService.updateBankDetails(id, dto);
   }
 }
