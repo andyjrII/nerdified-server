@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
+import { CertificatesService } from '../certificates/certificates.service';
 import { Course, CourseEnrollment } from '@prisma/client';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
@@ -21,6 +22,7 @@ export class CoursesService {
   constructor(
     private prisma: PrismaService,
     private sessionsService: SessionsService,
+    private certificatesService: CertificatesService,
   ) {}
 
   async getCourses(page: number, search: string): Promise<Object> {
@@ -544,6 +546,15 @@ export class CoursesService {
     });
     if (dto.status === 'STARTED') {
       await this.sessionsService.createBookingsForEnrolledStudents(dto.courseId);
+    }
+    if (dto.status === 'FINISHED') {
+      // Stamp completion time once (preserve any earlier value) so certificates
+      // carry the right date, then issue certificates best-effort.
+      await this.prisma.courseEnrollment.updateMany({
+        where: { courseId: dto.courseId, completedAt: null },
+        data: { completedAt: new Date() },
+      });
+      await this.certificatesService.issueForCourse(dto.courseId);
     }
     return await this.prisma.courseEnrollment.findMany({
       skip: 30 * (page - 1),

@@ -16,6 +16,7 @@ import { LivekitModule } from './livekit/livekit.module';
 import { MailModule } from './mail/mail.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PayoutsModule } from './payouts/payouts.module';
+import { CertificatesModule } from './certificates/certificates.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { PayoutsModule } from './payouts/payouts.module';
     MailModule,
     NotificationsModule,
     PayoutsModule,
+    CertificatesModule,
   ],
   providers: [PrismaService],
 })
