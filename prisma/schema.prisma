@@ -99,7 +99,7 @@ model CourseEnrollment {
   dateEnrolled    DateTime         @default(now())
   paidAmount      Decimal          @db.Decimal(10, 2)
   status          ENROLLMENTSTATUS @default(PENDING)
-  reference       String
+  reference       String           @unique // Paystack payment reference; unique to prevent reuse/replay
   completedAt     DateTime?
   certificateUrl  String?
 
@@ -136,6 +136,7 @@ model Session {
   status          SESSIONSTATUS    @default(SCHEDULED)
   meetingUrl      String?          // Video meeting URL (Agora/LiveKit room)
   recordingUrl    String?          // Session recording URL
+  reminderSentAt  DateTime?        // When CLASS_REMINDER notifications went out (null = not yet)
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   bookings        SessionBooking[]

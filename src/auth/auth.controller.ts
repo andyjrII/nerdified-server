@@ -25,6 +25,7 @@ import { SignupDto } from './dto/signup.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { Tokens } from './types/tokens.type';
 import { UpdatePasswordDto } from './dto/update-password.dto';
+import { UpdateMyPasswordDto } from './dto/update-my-password.dto';
 import { Student } from '@prisma/client';
 import { TutorSignupDto } from './dto/tutor-signup.dto';
 import { JwtPayload } from './strategies/at.strategy';
@@ -129,6 +130,23 @@ export class AuthController {
     @Body() dto: UpdatePasswordDto,
   ): Promise<Student | undefined> {
     return await this.authService.changePassword(dto);
+  }
+
+  /** Role-aware password change for the current user (student, tutor, or admin). */
+  @UseGuards(AtGuard)
+  @Patch('me/password')
+  @HttpCode(HttpStatus.OK)
+  async changeMyPassword(
+    @GetCurrentUser() user: JwtPayload,
+    @Body() dto: UpdateMyPasswordDto,
+  ): Promise<{ message: string }> {
+    const id = typeof user.sub === 'number' ? user.sub : Number(user.sub);
+    return await this.authService.changeMyPassword(
+      id,
+      user.role,
+      dto.oldPassword,
+      dto.newPassword,
+    );
   }
 
   @Public()

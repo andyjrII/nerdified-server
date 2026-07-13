@@ -204,6 +204,58 @@ export class AuthService {
     return updatedStudent;
   }
 
+  /**
+   * Role-aware password change for the authenticated user. Identity comes from
+   * the JWT (userId + role); the correct table is updated based on role.
+   */
+  async changeMyPassword(
+    userId: number,
+    role: UserRole,
+    oldPassword: string,
+    newPassword: string,
+  ): Promise<{ message: string }> {
+    const account = await this.findAccountByRole(userId, role);
+    if (!account) throw new UnauthorizedException('Access Denied!');
+
+    const matches = await bcrypt.compare(oldPassword, account.password);
+    if (!matches) throw new UnauthorizedException('Current password is incorrect');
+
+    const password = await this.hashData(newPassword);
+    switch (role) {
+      case 'STUDENT':
+        await this.prisma.student.update({ where: { id: userId }, data: { password } });
+        break;
+      case 'TUTOR':
+        await this.prisma.tutor.update({ where: { id: userId }, data: { password } });
+        break;
+      case 'SUPER_ADMIN':
+      case 'SUB_ADMIN':
+        await this.prisma.admin.update({ where: { id: userId }, data: { password } });
+        break;
+      default:
+        throw new UnauthorizedException('Access Denied!');
+    }
+    return { message: 'Password updated' };
+  }
+
+  /** Loads the account row (with password) for a user, by role. */
+  private async findAccountByRole(
+    userId: number,
+    role: UserRole,
+  ): Promise<{ password: string } | null> {
+    switch (role) {
+      case 'STUDENT':
+        return this.prisma.student.findUnique({ where: { id: userId } });
+      case 'TUTOR':
+        return this.prisma.tutor.findUnique({ where: { id: userId } });
+      case 'SUPER_ADMIN':
+      case 'SUB_ADMIN':
+        return this.prisma.admin.findUnique({ where: { id: userId } });
+      default:
+        return null;
+    }
+  }
+
   // helper & utility functions
 
   async updateRT(userId: number, rt: string, role: UserRole) {

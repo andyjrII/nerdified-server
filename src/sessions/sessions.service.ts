@@ -9,6 +9,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Session, TutorAvailability, SessionBooking } from '@prisma/client';
 import { DAYOFWEEK } from '@prisma/client';
 import { LivekitService } from '../livekit/livekit.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { MailService } from '../mail/mail.service';
 
 const DAY_SHORT_TO_ENUM: Record<string, DAYOFWEEK> = {
   Mon: 'MONDAY',
@@ -51,7 +53,46 @@ export class SessionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly livekit: LivekitService,
+    private readonly notifications: NotificationsService,
+    private readonly mail: MailService,
   ) {}
+
+  /**
+   * Notifies a set of students (in-app + email) about a schedule change.
+   * Best-effort: failures are swallowed so they can't break the approval flow.
+   */
+  private async notifyStudentsOfScheduleChange(
+    studentIds: number[],
+    courseTitle: string,
+    headline: string,
+    detail: string,
+  ): Promise<void> {
+    if (!studentIds.length) return;
+    const students = await this.prisma.student.findMany({
+      where: { id: { in: studentIds } },
+      select: { id: true, email: true },
+    });
+    await Promise.all(
+      students.map(async (s) => {
+        await this.notifications.notifyStudent(s.id, {
+          type: 'SCHEDULE_CHANGE',
+          title: headline,
+          message: `${courseTitle}: ${detail}`,
+          link: '/student/sessions',
+        });
+        void this.mail.sendEmail({
+          to: s.email,
+          subject: `Schedule update for ${courseTitle}`,
+          html: this.mail.layout(
+            headline,
+            `<p>There's a schedule update for <strong>${courseTitle}</strong>.</p><p>${detail}</p>`,
+            `${process.env.FRONTEND_BASE_URL ?? ''}/student/sessions`,
+            'View my sessions',
+          ),
+        });
+      }),
+    );
+  }
 
   async createAvailability(
     tutorId: number,
@@ -759,6 +800,27 @@ export class SessionsService {
           endTime: req.requestedEndTime,
         },
       });
+
+      // Tell students booked on this session about the new time.
+      const session = await this.prisma.session.findUnique({
+        where: { id: req.sessionId },
+        include: {
+          course: { select: { title: true } },
+          bookings: {
+            where: { status: { not: 'CANCELLED' } },
+            select: { studentId: true },
+          },
+        },
+      });
+      if (session) {
+        const newTime = req.requestedStartTime.toUTCString();
+        await this.notifyStudentsOfScheduleChange(
+          session.bookings.map((b) => b.studentId),
+          session.course.title,
+          'Session rescheduled',
+          `${session.title ?? 'A session'} has moved to ${newTime}.`,
+        );
+      }
     }
     return this.prisma.rescheduleRequest.findUnique({
       where: { id: requestId },
@@ -841,7 +903,7 @@ export class SessionsService {
       },
     });
     if (status === 'APPROVED') {
-      const session = await this.prisma.session.create({
+      await this.prisma.session.create({
         data: {
           courseId: req.courseId,
           tutorId: req.course.tutorId,
@@ -854,6 +916,18 @@ export class SessionsService {
         },
       });
       await this.createBookingsForEnrolledStudents(req.courseId);
+
+      // Tell enrolled students a new session has been added.
+      const enrollments = await this.prisma.courseEnrollment.findMany({
+        where: { courseId: req.courseId, status: 'STARTED' },
+        select: { studentId: true },
+      });
+      await this.notifyStudentsOfScheduleChange(
+        enrollments.map((e) => e.studentId),
+        req.course.title,
+        'New session added',
+        `${req.title ?? 'A new session'} is scheduled for ${req.startTime.toUTCString()}.`,
+      );
     }
     return this.prisma.addSessionRequest.findUnique({
       where: { id: requestId },

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -7,13 +8,21 @@ import { CourseEnrollment, Student } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CourseEnrollmentDto } from './dto/course-enrollment.dto';
 import { formatCurrency } from '../common/utils/formatCurrency';
+import { PaystackService } from '../payments/paystack.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { MailService } from '../mail/mail.service';
 import { UploadApiResponse } from 'cloudinary';
 import { cloudinary } from '../cloudinary/cloudinary.provider';
 import { Readable } from 'stream';
 
 @Injectable()
 export class StudentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly paystack: PaystackService,
+    private readonly notifications: NotificationsService,
+    private readonly mail: MailService,
+  ) {}
 
   async getStudent(email: string): Promise<Student | undefined> {
     const student = await this.prisma.student.findUnique({
@@ -39,19 +48,96 @@ export class StudentsService {
     });
     if (!course) throw new NotFoundException('Course not found');
     if (course.courseType === 'BOTH' && !dto.deliveryMode) {
-      throw new BadRequestException('deliveryMode (GROUP or ONE_ON_ONE) is required when course offers both');
+      throw new BadRequestException(
+        'deliveryMode (GROUP or ONE_ON_ONE) is required when course offers both',
+      );
     }
+
+    // Reject reuse of a payment reference (idempotency / replay protection).
+    const existing = await this.prisma.courseEnrollment.findFirst({
+      where: { reference: dto.reference },
+    });
+    if (existing) {
+      throw new ConflictException(
+        'This payment reference has already been used',
+      );
+    }
+
+    // Authoritative price comes from the course, NEVER from the client.
+    const expectedAmount = this.resolveCoursePrice(course, dto.deliveryMode);
+    const expectedKobo = Math.round(expectedAmount * 100);
+
+    // Confirm the payment actually happened, for the right amount, with Paystack.
+    const verification = await this.paystack.verifyTransaction(dto.reference);
+    if (verification.status !== 'success') {
+      throw new BadRequestException(
+        `Payment was not successful (status: ${verification.status})`,
+      );
+    }
+    if (verification.currency && verification.currency !== 'NGN') {
+      throw new BadRequestException(
+        `Unexpected payment currency: ${verification.currency}`,
+      );
+    }
+    if (verification.amount < expectedKobo) {
+      throw new BadRequestException(
+        'Amount paid does not match the course price',
+      );
+    }
+
     const studentId = await this.getStudentId(dto.email);
     const enrollment = await this.prisma.courseEnrollment.create({
       data: {
         studentId,
         courseId: dto.courseId,
-        paidAmount: dto.amount,
+        // Store the amount verified by Paystack, not the client-supplied value.
+        paidAmount: verification.amount / 100,
         reference: dto.reference,
         deliveryMode: dto.deliveryMode ?? null,
       },
     });
-    if (enrollment) return enrollment;
+
+    // Notify the student in-app and by email. Best-effort — never block the
+    // enrollment if a notification or email fails.
+    await this.notifications.notifyStudent(studentId, {
+      type: 'ENROLLMENT',
+      title: 'Enrollment confirmed',
+      message: `You're enrolled in "${course.title}". We'll let you know when sessions are scheduled.`,
+      link: '/student/courses',
+    });
+    void this.mail.sendEmail({
+      to: dto.email,
+      subject: `You're enrolled in ${course.title}`,
+      html: this.mail.layout(
+        'Enrollment confirmed 🎉',
+        `<p>Thanks for enrolling in <strong>${course.title}</strong>.</p>
+         <p>Amount paid: <strong>${formatCurrency(verification.amount / 100)}</strong><br/>
+         Reference: <strong>${dto.reference}</strong></p>
+         <p>Head to your dashboard to view sessions and message your tutor.</p>`,
+        `${process.env.FRONTEND_BASE_URL ?? ''}/student/courses`,
+        'Go to my courses',
+      ),
+    });
+
+    return enrollment;
+  }
+
+  /**
+   * Resolves the price a student must pay for a course, in major units (NGN).
+   * For BOTH courses the 1:1 delivery mode uses the higher priceOneOnOne.
+   */
+  private resolveCoursePrice(
+    course: { price: unknown; priceOneOnOne: unknown; courseType: string },
+    deliveryMode?: string | null,
+  ): number {
+    if (
+      course.courseType === 'BOTH' &&
+      deliveryMode === 'ONE_ON_ONE' &&
+      course.priceOneOnOne != null
+    ) {
+      return Number(course.priceOneOnOne);
+    }
+    return Number(course.price);
   }
 
   async coursesEnrolled(email: string): Promise<CourseEnrollment[]> {

@@ -5,10 +5,14 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { DirectMessage, CourseChatMessage } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class MessagesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   // Direct Messages (Student ↔ Tutor)
   async sendDirectMessage(
@@ -35,9 +39,31 @@ export class MessagesService {
       data.tutorReceiverId = receiverId;
     }
 
-    return await this.prisma.directMessage.create({
+    const created = await this.prisma.directMessage.create({
       data,
     });
+
+    // Notify the recipient of the new message (in-app, best-effort).
+    const preview =
+      message.length > 80 ? `${message.slice(0, 77)}...` : message;
+    const notifyParams = {
+      type: 'MESSAGE' as const,
+      title: 'New message',
+      message: preview,
+    };
+    if (receiverType === 'STUDENT') {
+      await this.notifications.notifyStudent(receiverId, {
+        ...notifyParams,
+        link: '/student/messages',
+      });
+    } else {
+      await this.notifications.notifyTutor(receiverId, {
+        ...notifyParams,
+        link: '/tutor/students',
+      });
+    }
+
+    return created;
   }
 
   async getDirectMessages(

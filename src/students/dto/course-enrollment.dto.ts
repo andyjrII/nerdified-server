@@ -18,9 +18,14 @@ export class CourseEnrollmentDto {
   @Transform((courseId: any) => Number.parseInt(courseId))
   courseId: number;
 
-  @IsNotEmpty()
+  /**
+   * Display-only amount sent by the client. NOT trusted for enrollment — the
+   * server derives the authoritative price from the course and verifies the
+   * paid amount with Paystack. Kept optional for backward compatibility.
+   */
+  @IsOptional()
   @Transform((amount: any) => Number.parseInt(amount))
-  amount: number;
+  amount?: number;
 
   /** When course is BOTH: GROUP or ONE_ON_ONE */
   @IsOptional()
