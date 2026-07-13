@@ -14,6 +14,8 @@ import {
 import { SessionsService } from './sessions.service';
 import { AtGuard } from '../common/guards/at.guard';
 import { GetCurrentUserId } from '../common/decorators/get-current-userId.decorator';
+import { GetCurrentUser } from '../common/decorators/get-current-user.decorator';
+import { JwtPayload } from '../auth/strategies/at.strategy';
 import { CreateAvailabilityDto } from './dto/create-availability.dto';
 import { CreateSessionDto } from './dto/create-session.dto';
 import { CreateOneOnOneSessionDto } from './dto/create-one-on-one-session.dto';
@@ -310,5 +312,39 @@ export class SessionsController {
     @GetCurrentUserId() userId: number,
   ) {
     return await this.sessionsService.generateLivekitToken(sessionId, userId);
+  }
+
+  /*
+   * Start recording a live session (tutor who owns the session only)
+   */
+  @UseGuards(AtGuard)
+  @Post(':sessionId/recording/start')
+  @HttpCode(HttpStatus.OK)
+  async startRecording(
+    @Param('sessionId', ParseIntPipe) sessionId: number,
+    @GetCurrentUser() user: JwtPayload,
+  ) {
+    return await this.sessionsService.startRecording(
+      sessionId,
+      Number(user.sub),
+      String(user.role),
+    );
+  }
+
+  /*
+   * Stop the active recording and store the recording URL on the session
+   */
+  @UseGuards(AtGuard)
+  @Post(':sessionId/recording/stop')
+  @HttpCode(HttpStatus.OK)
+  async stopRecording(
+    @Param('sessionId', ParseIntPipe) sessionId: number,
+    @GetCurrentUser() user: JwtPayload,
+  ) {
+    return await this.sessionsService.stopRecording(
+      sessionId,
+      Number(user.sub),
+      String(user.role),
+    );
   }
 }

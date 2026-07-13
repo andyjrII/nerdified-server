@@ -1065,6 +1065,108 @@ export class SessionsService {
         endTime: session.endTime,
         status: session.status,
       },
+      recording: {
+        available: this.livekit.recordingConfigured(),
+        active: !!session.recordingEgressId,
+      },
     };
+  }
+
+  // ---------- Session recording ----------
+
+  /** Starts recording a session's LiveKit room. Tutor-owned sessions only. */
+  async startRecording(
+    sessionId: number,
+    tutorId: number,
+    role: string,
+  ): Promise<{ recording: boolean }> {
+    if (role !== 'TUTOR') {
+      throw new ForbiddenException('Only tutors can record sessions');
+    }
+    if (!this.livekit.recordingConfigured()) {
+      throw new BadRequestException(
+        'Recording is not configured (set the RECORDING_S3_* environment variables)',
+      );
+    }
+    const session = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+    });
+    if (!session) throw new NotFoundException('Session not found');
+    if (session.tutorId !== tutorId) {
+      throw new ForbiddenException('You can only record your own sessions');
+    }
+    if (session.recordingEgressId) {
+      throw new ConflictException('This session is already being recorded');
+    }
+
+    const roomName = session.meetingUrl || `session-${session.id}`;
+    const filepath = `recordings/session-${session.id}-${Date.now()}.mp4`;
+    const egressId = await this.livekit.startRoomRecording(roomName, filepath);
+
+    // Guard against a concurrent start that won the race.
+    const claimed = await this.prisma.session.updateMany({
+      where: { id: session.id, recordingEgressId: null },
+      data: { recordingEgressId: egressId },
+    });
+    if (claimed.count === 0) {
+      await this.livekit.stopRoomRecording(egressId).catch(() => undefined);
+      throw new ConflictException('This session is already being recorded');
+    }
+    return { recording: true };
+  }
+
+  /** Stops the active recording and stores the recording URL on the session. */
+  async stopRecording(
+    sessionId: number,
+    tutorId: number,
+    role: string,
+  ): Promise<{ recording: boolean; recordingUrl: string | null }> {
+    if (role !== 'TUTOR') {
+      throw new ForbiddenException('Only tutors can record sessions');
+    }
+    const session = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+      include: {
+        course: { select: { title: true } },
+        bookings: {
+          where: { status: { not: 'CANCELLED' } },
+          select: { studentId: true },
+        },
+      },
+    });
+    if (!session) throw new NotFoundException('Session not found');
+    if (session.tutorId !== tutorId) {
+      throw new ForbiddenException('You can only record your own sessions');
+    }
+    if (!session.recordingEgressId) {
+      throw new BadRequestException('This session is not being recorded');
+    }
+
+    let recordingUrl: string | null = null;
+    try {
+      recordingUrl = await this.livekit.stopRoomRecording(
+        session.recordingEgressId,
+      );
+    } finally {
+      await this.prisma.session.update({
+        where: { id: session.id },
+        data: { recordingEgressId: null, recordingUrl: recordingUrl ?? undefined },
+      });
+    }
+
+    // Tell booked students the recording is ready (best-effort, in-app).
+    if (recordingUrl) {
+      await Promise.all(
+        session.bookings.map((b) =>
+          this.notifications.notifyStudent(b.studentId, {
+            type: 'SYSTEM',
+            title: 'Session recording available',
+            message: `${session.title ?? 'A session'} for ${session.course.title} has a recording you can watch.`,
+            link: '/student/sessions',
+          }),
+        ),
+      );
+    }
+    return { recording: false, recordingUrl };
   }
 }

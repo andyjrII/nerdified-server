@@ -138,6 +138,7 @@ model Session {
   status          SESSIONSTATUS    @default(SCHEDULED)
   meetingUrl      String?          // Video meeting URL (Agora/LiveKit room)
   recordingUrl    String?          // Session recording URL
+  recordingEgressId String?        // Active LiveKit egress ID while a recording is running
   reminderSentAt  DateTime?        // When CLASS_REMINDER notifications went out (null = not yet)
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
