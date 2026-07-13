@@ -6,12 +6,25 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { DirectMessage, CourseChatMessage } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
+import { MessagesGateway } from './messages.gateway';
+
+export interface ConversationPartner {
+  id: number;
+  type: 'STUDENT' | 'TUTOR';
+  name: string | null;
+  email: string;
+  imagePath: string | null;
+  lastMessage: string | null;
+  lastMessageAt: Date | null;
+  unreadCount: number;
+}
 
 @Injectable()
 export class MessagesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly gateway: MessagesGateway,
   ) {}
 
   // Direct Messages (Student ↔ Tutor)
@@ -43,6 +56,9 @@ export class MessagesService {
       data,
     });
 
+    // Deliver in real time to both participants' sockets.
+    this.gateway.emitDirectMessage(created);
+
     // Notify the recipient of the new message (in-app, best-effort).
     const preview =
       message.length > 80 ? `${message.slice(0, 77)}...` : message;
@@ -59,7 +75,7 @@ export class MessagesService {
     } else {
       await this.notifications.notifyTutor(receiverId, {
         ...notifyParams,
-        link: '/tutor/students',
+        link: '/tutor/messages',
       });
     }
 
@@ -136,14 +152,136 @@ export class MessagesService {
     });
   }
 
-  async markMessageAsRead(messageId: number): Promise<DirectMessage> {
-    return await this.prisma.directMessage.update({
+  async markMessageAsRead(
+    messageId: number,
+    userId: number,
+    userType: 'STUDENT' | 'TUTOR',
+  ): Promise<DirectMessage> {
+    // Only the receiver of a message may mark it read.
+    const receiverWhere =
+      userType === 'STUDENT'
+        ? { studentReceiverId: userId }
+        : { tutorReceiverId: userId };
+    const message = await this.prisma.directMessage.findFirst({
+      where: { id: messageId, ...receiverWhere },
+    });
+    if (!message) throw new NotFoundException('Message not found');
+
+    const updated = await this.prisma.directMessage.update({
       where: { id: messageId },
       data: {
         read: true,
         readAt: new Date(),
       },
     });
+    this.gateway.emitDirectMessageRead(updated);
+    return updated;
+  }
+
+  /**
+   * Conversation partners for the messages UI: everyone the user has messaged
+   * with, plus everyone they could message (students: tutors of their
+   * enrollments; tutors: students enrolled in their courses), with the last
+   * message and unread count per partner.
+   */
+  async getPartners(
+    userId: number,
+    userType: 'STUDENT' | 'TUTOR',
+  ): Promise<ConversationPartner[]> {
+    const partnerType: 'STUDENT' | 'TUTOR' =
+      userType === 'STUDENT' ? 'TUTOR' : 'STUDENT';
+    const messages = await this.getDirectMessages(userId, userType);
+
+    // Fold messages into per-partner stats (messages are newest-first).
+    const stats = new Map<
+      number,
+      { lastMessage: string; lastMessageAt: Date; unreadCount: number }
+    >();
+    for (const m of messages) {
+      const partnerId =
+        userType === 'STUDENT'
+          ? m.tutorSenderId ?? m.tutorReceiverId
+          : m.studentSenderId ?? m.studentReceiverId;
+      if (!partnerId) continue;
+      const existing = stats.get(partnerId);
+      if (!existing) {
+        stats.set(partnerId, {
+          lastMessage: m.message,
+          lastMessageAt: m.createdAt,
+          unreadCount: 0,
+        });
+      }
+      const receivedByMe =
+        userType === 'STUDENT'
+          ? m.studentReceiverId === userId
+          : m.tutorReceiverId === userId;
+      if (receivedByMe && !m.read) {
+        stats.get(partnerId)!.unreadCount += 1;
+      }
+    }
+
+    // Everyone the user could start a conversation with, via enrollments.
+    let contactIds: number[];
+    if (userType === 'STUDENT') {
+      const enrollments = await this.prisma.courseEnrollment.findMany({
+        where: { studentId: userId, status: { in: ['STARTED', 'FINISHED'] } },
+        select: { course: { select: { tutorId: true } } },
+      });
+      contactIds = enrollments.map((e) => e.course.tutorId);
+    } else {
+      const enrollments = await this.prisma.courseEnrollment.findMany({
+        where: {
+          course: { tutorId: userId },
+          status: { in: ['STARTED', 'FINISHED'] },
+        },
+        select: { studentId: true },
+      });
+      contactIds = enrollments.map((e) => e.studentId);
+    }
+
+    const partnerIds = [...new Set([...stats.keys(), ...contactIds])];
+    if (!partnerIds.length) return [];
+
+    const select = {
+      id: true,
+      name: true,
+      email: true,
+      imagePath: true,
+    };
+    const records =
+      partnerType === 'TUTOR'
+        ? await this.prisma.tutor.findMany({
+            where: { id: { in: partnerIds } },
+            select,
+          })
+        : await this.prisma.student.findMany({
+            where: { id: { in: partnerIds } },
+            select,
+          });
+
+    const partners: ConversationPartner[] = records.map((r) => {
+      const s = stats.get(r.id);
+      return {
+        id: r.id,
+        type: partnerType,
+        name: r.name,
+        email: r.email,
+        imagePath: r.imagePath,
+        lastMessage: s?.lastMessage ?? null,
+        lastMessageAt: s?.lastMessageAt ?? null,
+        unreadCount: s?.unreadCount ?? 0,
+      };
+    });
+
+    // Active conversations first (newest), then contacts alphabetically.
+    partners.sort((a, b) => {
+      if (a.lastMessageAt && b.lastMessageAt)
+        return b.lastMessageAt.getTime() - a.lastMessageAt.getTime();
+      if (a.lastMessageAt) return -1;
+      if (b.lastMessageAt) return 1;
+      return (a.name ?? '').localeCompare(b.name ?? '');
+    });
+    return partners;
   }
 
   // Course Chat Messages
@@ -168,7 +306,7 @@ export class MessagesService {
       throw new BadRequestException('Only tutors can send announcements');
     }
 
-    return await this.prisma.courseChatMessage.create({
+    const created = await this.prisma.courseChatMessage.create({
       data: {
         courseId,
         senderId,
@@ -177,6 +315,9 @@ export class MessagesService {
         isAnnouncement,
       },
     });
+    // Deliver in real time to everyone in the course chat room.
+    this.gateway.emitCourseMessage(created);
+    return created;
   }
 
   async getCourseChatMessages(courseId: number): Promise<CourseChatMessage[]> {

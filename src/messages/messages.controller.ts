@@ -56,6 +56,20 @@ export class MessagesController {
   }
 
   /*
+   * Get conversation partners (people messaged with + available contacts),
+   * with last message and unread count per partner
+   */
+  @UseGuards(AtGuard)
+  @Get('direct/partners')
+  @HttpCode(HttpStatus.OK)
+  async getPartners(
+    @GetCurrentUserId() userId: number,
+    @Query('userType') userType: SENDERTYPE,
+  ) {
+    return await this.messagesService.getPartners(userId, userType);
+  }
+
+  /*
    * Get conversation with a specific user
    */
   @UseGuards(AtGuard)
@@ -83,8 +97,14 @@ export class MessagesController {
   @HttpCode(HttpStatus.OK)
   async markMessageAsRead(
     @Param('messageId', ParseIntPipe) messageId: number,
+    @GetCurrentUserId() userId: number,
+    @Query('userType') userType: SENDERTYPE,
   ): Promise<DirectMessage> {
-    return await this.messagesService.markMessageAsRead(messageId);
+    return await this.messagesService.markMessageAsRead(
+      messageId,
+      userId,
+      userType,
+    );
   }
 
   /*
