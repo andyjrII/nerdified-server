@@ -6,6 +6,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { SignupDto } from './dto/signup.dto';
 import * as bcrypt from 'bcrypt';
+import { randomBytes } from 'crypto';
 import { Tokens } from './types/tokens.type';
 import { JwtService } from '@nestjs/jwt/dist';
 import { SigninDto } from './dto/signin.dto';
@@ -67,6 +68,55 @@ export class AuthService {
     );
     await this.updateRT(newStudent.id, tokens.refresh_token, 'STUDENT');
     return tokens;
+  }
+
+  /**
+   * Google OAuth sign-in: finds the student/tutor by verified Google email or
+   * creates the account (random password — access is via Google; the profile
+   * picture becomes the avatar). New tutors still require admin approval.
+   */
+  async googleSignin(
+    profile: { email: string; name: string | null; picture: string | null },
+    role: 'STUDENT' | 'TUTOR',
+  ): Promise<Tokens & { approved: boolean }> {
+    if (role === 'STUDENT') {
+      let student = await this.prisma.student.findUnique({
+        where: { email: profile.email },
+      });
+      if (!student) {
+        const password = await this.hashData(randomBytes(32).toString('hex'));
+        student = await this.prisma.student.create({
+          data: {
+            email: profile.email,
+            password,
+            name: profile.name,
+            address: '',
+            imagePath: profile.picture,
+          },
+        });
+      }
+      const tokens = await this.getTokens(student.id, student.email, 'STUDENT');
+      await this.updateRT(student.id, tokens.refresh_token, 'STUDENT');
+      return { ...tokens, approved: true };
+    }
+
+    let tutor = await this.prisma.tutor.findUnique({
+      where: { email: profile.email },
+    });
+    if (!tutor) {
+      const password = await this.hashData(randomBytes(32).toString('hex'));
+      tutor = await this.prisma.tutor.create({
+        data: {
+          email: profile.email,
+          password,
+          name: profile.name,
+          imagePath: profile.picture,
+        },
+      });
+    }
+    const tokens = await this.getTokens(tutor.id, tutor.email, 'TUTOR');
+    await this.updateRT(tutor.id, tokens.refresh_token, 'TUTOR');
+    return { ...tokens, approved: tutor.approved };
   }
 
   /** Unified platform sign-in (student or tutor). Body must include role. */

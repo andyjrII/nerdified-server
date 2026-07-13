@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Patch,
   Post,
+  Query,
   Req,
   Res,
   UseGuards,
@@ -14,6 +15,8 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { JwtService } from '@nestjs/jwt';
+import { GoogleOauthService } from './google-oauth.service';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { GetCurrentUserId } from '../common/decorators/get-current-userId.decorator';
 import { GetCurrentUser } from '../common/decorators/get-current-user.decorator';
@@ -44,9 +47,19 @@ const accessCookieOptions = {
   maxAge: 60 * 60 * 1000, // 1 hour in ms (matches AT expiry)
 };
 
+/** First configured frontend origin, for OAuth redirects back to the app. */
+function frontendBase(): string {
+  const first = process.env.FRONTEND_BASE_URL?.split(',')[0]?.trim();
+  return first || 'http://localhost:3101';
+}
+
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly googleOauth: GoogleOauthService,
+    private readonly jwtService: JwtService,
+  ) {}
 
   @Public()
   @Post('signup')
@@ -176,6 +189,77 @@ export class AuthController {
     res.cookie('refresh_token', refresh_token, refreshCookieOptions);
     res.cookie('access_token', access_token, accessCookieOptions);
     return { email: dto.email, role: 'TUTOR' };
+  }
+
+  // ---------- Google OAuth ----------
+
+  /**
+   * Starts Google sign-in for the given role. The role rides in a short-lived
+   * signed `state` token (CSRF protection + role transport, stateless).
+   */
+  @Public()
+  @Get('google')
+  async googleStart(
+    @Query('role') role: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const r = String(role ?? '').toUpperCase();
+    if (r !== 'STUDENT' && r !== 'TUTOR') {
+      res.redirect(`${frontendBase()}/signin?oauth_error=invalid_role`);
+      return;
+    }
+    if (!this.googleOauth.isConfigured()) {
+      res.redirect(`${frontendBase()}/signin?oauth_error=unavailable`);
+      return;
+    }
+    const state = await this.jwtService.signAsync(
+      { role: r, typ: 'google_oauth' },
+      { secret: process.env.AT_SECRET_KEY, expiresIn: '10m' },
+    );
+    res.redirect(this.googleOauth.buildAuthUrl(state));
+  }
+
+  /** Google redirects here; signs the user in (creating the account if new). */
+  @Public()
+  @Get('google/callback')
+  async googleCallback(
+    @Query('code') code: string,
+    @Query('state') state: string,
+    @Query('error') error: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const fail = (reason: string) =>
+      res.redirect(`${frontendBase()}/signin?oauth_error=${reason}`);
+
+    if (error || !code || !state) return fail('cancelled');
+
+    let role: 'STUDENT' | 'TUTOR';
+    try {
+      const payload = await this.jwtService.verifyAsync<{
+        role: string;
+        typ: string;
+      }>(state, { secret: process.env.AT_SECRET_KEY });
+      if (
+        payload.typ !== 'google_oauth' ||
+        (payload.role !== 'STUDENT' && payload.role !== 'TUTOR')
+      )
+        return fail('invalid_state');
+      role = payload.role;
+    } catch {
+      return fail('invalid_state');
+    }
+
+    const profile = await this.googleOauth.fetchProfile(code);
+    if (!profile) return fail('google_failed');
+    if (!profile.emailVerified) return fail('email_unverified');
+
+    const { access_token, refresh_token, approved } =
+      await this.authService.googleSignin(profile, role);
+    res.cookie('refresh_token', refresh_token, refreshCookieOptions);
+    res.cookie('access_token', access_token, accessCookieOptions);
+    res.redirect(
+      `${frontendBase()}/oauth/callback?role=${role}&approved=${approved}`,
+    );
   }
 
   /** Returns current user from access token cookie. Used by client to establish auth state. */

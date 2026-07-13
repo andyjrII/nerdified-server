@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
+import { GoogleOauthService } from './google-oauth.service';
 import { ATStrategy } from './strategies/at.strategy';
 import { RTStrategy } from './strategies/rt.strategy';
 import { JwtModule } from '@nestjs/jwt';
@@ -9,7 +10,7 @@ import { TutorsModule } from '../tutors/tutors.module';
 
 @Module({
   imports: [JwtModule.register({}), StudentsModule, TutorsModule],
-  providers: [AuthService, ATStrategy, RTStrategy],
+  providers: [AuthService, GoogleOauthService, ATStrategy, RTStrategy],
   controllers: [AuthController],
 })
 export class AuthModule {}
