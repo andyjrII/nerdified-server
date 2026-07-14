@@ -1,0 +1,68 @@
+# Render Blueprint for the Nerdified API server.
+#
+# Fixes the deploy crash where `nest start` recompiled TypeScript in the running
+# container and ran out of memory. Compilation now happens in the BUILD phase
+# (`nest build`), and the service starts the prebuilt output (`node dist/src/main`).
+#
+# If your Render service was created manually (not from this blueprint), set the
+# same values in the dashboard instead — see the notes at the bottom.
+services:
+  - type: web
+    name: nerdified-server
+    runtime: node
+    plan: starter # bump to "standard" if you need more memory/CPU
+    # Install dev deps too (nest CLI + typescript are needed to build), then compile.
+    buildCommand: npm install --include=dev && npm run build
+    # Apply any pending database migrations before the new version goes live.
+    preDeployCommand: npx prisma migrate deploy
+    # Run the compiled server (no runtime compilation).
+    startCommand: npm run start:prod
+    healthCheckPath: /api/courses/featured
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Secrets — set these in the Render dashboard (sync: false keeps them out of git).
+      - key: DATABASE_URL
+        sync: false
+      - key: AT_SECRET_KEY
+        sync: false
+      - key: RT_SECRET_KEY
+        sync: false
+      - key: FRONTEND_BASE_URL
+        sync: false
+      - key: CLOUD_NAME
+        sync: false
+      - key: API_KEY
+        sync: false
+      - key: API_SECRET
+        sync: false
+      - key: PAYSTACK_SECRET_KEY
+        sync: false
+      - key: BREVO_API_KEY
+        sync: false
+      - key: BREVO_SENDER_EMAIL
+        sync: false
+      - key: LIVEKIT_WS_URL
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_CALLBACK_URL
+        sync: false
+
+# ---------------------------------------------------------------------------
+# If you keep your existing (manually created) Render service, set these in the
+# dashboard → Settings instead of using this blueprint:
+#
+#   Build Command:       npm install --include=dev && npm run build
+#   Pre-Deploy Command:  npx prisma migrate deploy
+#   Start Command:       npm run start:prod
+#
+# The key change is that the app is COMPILED during build and STARTED from the
+# prebuilt dist/ — `nest start` (runtime compilation) is what ran out of memory.
+# ---------------------------------------------------------------------------
