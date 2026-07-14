@@ -10,11 +10,12 @@ services:
   - type: web
     name: nerdified-server
     runtime: node
-    plan: starter # bump to "standard" if you need more memory/CPU
-    # Install dev deps too (nest CLI + typescript are needed to build), then compile.
-    buildCommand: npm install --include=dev && npm run build
-    # Apply any pending database migrations before the new version goes live.
-    preDeployCommand: npx prisma migrate deploy
+    plan: free # bump to a paid plan for more memory/CPU
+    # Install dev deps too (nest CLI + typescript are needed to build), compile,
+    # then apply pending DB migrations. Migrations run here (not preDeployCommand,
+    # which is a paid-only feature) so this works on the free plan. All migrations
+    # are additive, so applying them during build is safe.
+    buildCommand: npm install --include=dev && npm run build && npx prisma migrate deploy
     # Run the compiled server (no runtime compilation).
     startCommand: npm run start:prod
     healthCheckPath: /api/courses/featured
@@ -59,10 +60,11 @@ services:
 # If you keep your existing (manually created) Render service, set these in the
 # dashboard → Settings instead of using this blueprint:
 #
-#   Build Command:       npm install --include=dev && npm run build
-#   Pre-Deploy Command:  npx prisma migrate deploy
-#   Start Command:       npm run start:prod
+#   Build Command:  npm install --include=dev && npm run build && npx prisma migrate deploy
+#   Start Command:  npm run start:prod
 #
-# The key change is that the app is COMPILED during build and STARTED from the
-# prebuilt dist/ — `nest start` (runtime compilation) is what ran out of memory.
+# (Pre-Deploy Command is paid-only, so migrations run inside the Build Command
+# on the free plan.) The key change is that the app is COMPILED during build and
+# STARTED from the prebuilt dist/ — `nest start` (runtime compilation) is what
+# ran out of memory.
 # ---------------------------------------------------------------------------
