@@ -21,7 +21,6 @@ model Student {
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
   imagePath    String?
-  address      String
   courses      CourseEnrollment[]
   review       Review[]
   wishlist     Wishlist[]

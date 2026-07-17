@@ -184,7 +184,6 @@ export class AuthService {
         password,
         phoneNumber: dto.phoneNumber,
         name: dto.name,
-        address: dto.address,
         imagePath: uploadedImage.secure_url,
       },
     });
@@ -223,7 +222,6 @@ export class AuthService {
             email: profile.email,
             password,
             name: profile.name,
-            address: '',
             imagePath: profile.picture,
             emailVerifiedAt: new Date(), // Google email is verified
           },
